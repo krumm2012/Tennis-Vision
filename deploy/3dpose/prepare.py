@@ -19,7 +19,7 @@ FILES = (
     'mirror_corner_suggestion.json', 'paired_ground_diagnostic.json',
 )
 PAGE = ('viewer.html', 'mesh_renderer.js', 'texture_audit.js',
-        'calibration_editor.js', 'mirror_grid_editor.js')
+        'calibration_editor.js', 'mirror_grid_editor.js', 'racket_editor.js')
 
 
 def prepare() -> Path:
