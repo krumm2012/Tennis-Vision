@@ -1,0 +1,12 @@
+services:
+  viewer:
+    build: .
+    image: tennis-3dpose-viewer:hehaa-3dpose
+    container_name: tennis-3dpose-viewer
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18766:80"
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
