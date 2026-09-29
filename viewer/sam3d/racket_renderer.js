@@ -66,7 +66,7 @@ class RacketLayer{
   const total=[...this.pose.frames.values()].filter(x=>x.status==='fitted').length,row=this.pose.frames.get(frame);
   if(!row){status.textContent=`已拟合 ${total} 帧；当前第 ${frame+1} 帧无可靠球拍姿态`;return}
   if(row.status!=='fitted'){status.textContent=`第 ${frame+1} 帧：${row.status}；球拍不显示`;return}
-  if(row.source==='joint_sequence_candidate'){status.textContent=`第 ${frame+1} 帧 · 联合候选 · 轮廓残差 ${row.mask_fit_rms_px.toFixed(1)} px · 接触先验残差 ${row.contact_proxy_mm.toFixed(1)} mm · ${row.review_reasons.length?'需要复核':'未触发阈值，非准确性验证'} · 手指网格未更新`;return}
+  if(row.source==='joint_sequence_candidate'){status.textContent=`第 ${frame+1} 帧 · 联合候选 · 轮廓残差 ${row.mask_fit_rms_px.toFixed(1)} px · 接触先验残差 ${row.contact_proxy_mm.toFixed(1)} mm · ${row.review_reasons.length?'需要复核':'未触发阈值，非准确性验证'} · ${row.hand_mesh_updated?'手指网格近似变形':'手指网格未更新'}`;return}
   const warning=row.ambiguous?' · 单目拍面朝向有歧义':'';
   const rough=row.source?.includes('estimate')?' · 手工粗标待复核':'';
   const method=row.quality==='temporal_estimate'?'掌柄与时序约束估计（需复核）':row.quality==='interpolated'?'邻帧插值（需复核）':row.quality==='silhouette_fitted'?'轮廓拟合':'关键点拟合';
@@ -141,7 +141,7 @@ const section=document.createElement('details');section.id='racket3dPanel';secti
 <p>Wilson 版使用真实拍框、掌内握持位置、镜中候选观测和时序约束。绿色轮廓通过拟合筛选，橙色为待复核估计。掌内握点及实物尺寸尚待人工确认，拍面正反方向仍有歧义。可加载上一版比较。</p>
 <div class="row"><label><input id="racket3dVisible" type="checkbox" checked>显示三维球拍</label><button id="racket3dImport">导入拟合 JSON</button><button id="racket3dReview">下一需复核帧</button><button id="racket3dReload">加载服务器最新版</button><button id="racket3dGrip">握持修正版（待复核）</button><button id="racket3dPrevious">上一版对比</button><a id="racketJointFull" href="joint_fit_v4/full/viewer.html" hidden>完整 Viewer · 联合候选</a><a id="racketJointDiagnostic" href="joint_fit_v4/viewer.html" hidden>全片掌柄联合诊断</a><span id="racket3dStatus" role="status"></span></div>`;
 document.body.appendChild(section);
-if(window.TENNIS_JOINT_CANDIDATE){section.open=true;section.querySelector('p').textContent='原片人体和联合球拍使用同一相机坐标。橙色手部关节为优化结果，透视叠加便于查看，尚未驱动手指网格。';const label=document.createElement('label');label.innerHTML='<input id="jointHandVisible" type="checkbox" checked>显示优化手部关节（透视叠加）';section.querySelector('.row').prepend(label);label.querySelector('input').onchange=()=>render();for(const id of ['racket3dImport','racket3dGrip','racket3dPrevious'])document.getElementById(id).hidden=true;}
+if(window.TENNIS_JOINT_CANDIDATE){section.open=true;section.querySelector('p').textContent=window.TENNIS_HAND_MESH_PREVIEW?'原片人体和联合球拍使用同一相机坐标。手指网格按优化关节近似变形；橙色线显示目标骨架，网格接触尚未验证。':'原片人体和联合球拍使用同一相机坐标。橙色手部关节为优化结果，透视叠加便于查看，尚未驱动手指网格。';const label=document.createElement('label');label.innerHTML='<input id="jointHandVisible" type="checkbox" checked>显示优化手部关节（透视叠加）';section.querySelector('.row').prepend(label);label.querySelector('input').onchange=()=>render();for(const id of ['racket3dImport','racket3dGrip','racket3dPrevious'])document.getElementById(id).hidden=true;}
 const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.hidden=true;document.body.appendChild(input);
 document.getElementById('racket3dVisible').onchange=e=>{layer.enabled=e.target.checked;render()};
 document.getElementById('racket3dImport').onclick=()=>input.click();

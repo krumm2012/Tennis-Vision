@@ -73,8 +73,10 @@ an hour. HTTP Range and precompressed pose/texture data remain supported.
 
 Validation: all 60 deployed file hashes and HTTP resources; byte-range responses
 for video, mesh and Wilson model; gzip responses; Nginx configuration and health
-endpoint. Candidate accuracy limitations remain unchanged: orange joints are an
-overlay and have not deformed the hand mesh. This release is bound to local loopback.
+endpoint. The initial release displayed orange joints as an overlay without
+deforming the hand mesh. Later local builds may include an approximate hand mesh
+preview; check the candidate page and release manifest for the running version.
+This release is bound to local loopback.
 
 ## bakewell.cloud release (2026-09-29)
 
