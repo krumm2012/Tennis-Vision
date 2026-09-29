@@ -137,11 +137,12 @@ class RacketLayer{
  }
 }
 const layer=new RacketLayer();
-const section=document.createElement('details');section.id='racket3dPanel';section.innerHTML=`<summary>真实球拍姿态 · 3D 模型</summary>
+const section=document.createElement('details');section.id='racket3dPanel';section.innerHTML=`<summary>球拍数据与高级操作</summary>
 <p>Wilson 版使用真实拍框、掌内握持位置、镜中候选观测和时序约束。绿色轮廓通过拟合筛选，橙色为待复核估计。掌内握点及实物尺寸尚待人工确认，拍面正反方向仍有歧义。可加载上一版比较。</p>
 <div class="row"><label><input id="racket3dVisible" type="checkbox" checked>显示三维球拍</label><button id="racket3dImport">导入拟合 JSON</button><button id="racket3dReview">下一需复核帧</button><button id="racket3dReload">加载服务器最新版</button><button id="racket3dGrip">握持修正版（待复核）</button><button id="racket3dPrevious">上一版对比</button><a id="racketJointFull" href="joint_fit_v4/full/viewer.html" hidden>完整 Viewer · 联合候选</a><a id="racketJointDiagnostic" href="joint_fit_v4/viewer.html" hidden>全片掌柄联合诊断</a><span id="racket3dStatus" role="status"></span></div>`;
-document.body.appendChild(section);
-if(window.TENNIS_JOINT_CANDIDATE){section.open=true;section.querySelector('p').textContent=window.TENNIS_HAND_MESH_PREVIEW?'原片人体和联合球拍使用同一相机坐标。手指网格按优化关节近似变形；橙色线显示目标骨架，网格接触尚未验证。':'原片人体和联合球拍使用同一相机坐标。橙色手部关节为优化结果，透视叠加便于查看，尚未驱动手指网格。';const label=document.createElement('label');label.innerHTML='<input id="jointHandVisible" type="checkbox" checked>显示优化手部关节（透视叠加）';section.querySelector('.row').prepend(label);label.querySelector('input').onchange=()=>render();for(const id of ['racket3dImport','racket3dGrip','racket3dPrevious'])document.getElementById(id).hidden=true;}
+(document.getElementById('toolPanels')||document.body).appendChild(section);
+if(window.TENNIS_JOINT_CANDIDATE){section.querySelector('p').textContent=window.TENNIS_HAND_MESH_PREVIEW?'原片人体和联合球拍使用同一相机坐标。手指网格按优化关节近似变形；橙色线显示目标骨架，网格接触尚未验证。':'原片人体和联合球拍使用同一相机坐标。橙色手部关节为优化结果，透视叠加便于查看，尚未驱动手指网格。';const label=document.createElement('label');label.innerHTML='<input id="jointHandVisible" type="checkbox" checked>显示优化手部关节';section.querySelector('.row').prepend(label);label.querySelector('input').onchange=()=>render();for(const id of ['racket3dImport','racket3dGrip','racket3dPrevious'])document.getElementById(id).hidden=true;}
+const quick=document.createElement('div');quick.id='racketQuick';quick.className='quickbar';quick.setAttribute('role','group');quick.setAttribute('aria-label','球拍快捷操作');quick.innerHTML='<strong>球拍</strong>';document.querySelector('nav.playback')?.after(quick);quick.append(document.getElementById('racket3dVisible').closest('label'));if(window.TENNIS_JOINT_CANDIDATE)quick.append(document.getElementById('jointHandVisible').closest('label'));quick.append(document.getElementById('racket3dReview'),document.getElementById('racket3dStatus'));
 const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.hidden=true;document.body.appendChild(input);
 document.getElementById('racket3dVisible').onchange=e=>{layer.enabled=e.target.checked;render()};
 document.getElementById('racket3dImport').onclick=()=>input.click();

@@ -41,7 +41,7 @@ section.innerHTML=`<summary>球拍二维关键帧标注</summary>
 <p>在原视频中标记真人及镜中球拍，作为三维拟合与后续自动跟踪的观测点。标注本身是二维数据；拟合结果在下方三维球拍面板查看。</p>
 <div class="row"><button id="racketOpen">标注当前帧</button><button id="racketExport">导出球拍 JSON</button><button id="racketImport">导入球拍 JSON</button><span id="racketStatus" role="status"></span></div>
 <small>建议选择拍框清晰、不同挥拍角度的关键帧。五个真人点齐全才可拟合六自由度；镜中对应点有助于判断拍面朝向，必须标记同一个物理部位。</small>`;
-document.body.appendChild(section);
+(document.getElementById('toolPanels')||document.body).appendChild(section);
 const dialog=document.createElement('dialog');dialog.id='racketEditor';
 dialog.innerHTML=`<form method="dialog"><button class="close" aria-label="关闭球拍标注">×</button></form>
 <h2>球拍关键帧标注</h2><p>点击画面给选中的点定位；方向键微调 1 像素，Shift 加方向键为 10 像素。被遮挡的点可留空。镜中点须与真人点对应同一个球拍部位，拍框侧缘尤其要选同一侧。</p>
