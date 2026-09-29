@@ -154,7 +154,7 @@ document.getElementById('racket3dReload').onclick=async()=>{try{const response=a
 input.onchange=async()=>{try{if(!input.files?.[0])return;const content=await input.files[0].text();layer.load(JSON.parse(content));localStorage.setItem(STORAGE,content)}catch(e){document.getElementById('racket3dStatus').textContent='导入失败：'+e.message}finally{input.value=''}};
 try{const stored=window.TENNIS_JOINT_CANDIDATE?null:localStorage.getItem(STORAGE);if(stored)layer.load(JSON.parse(stored))}catch(e){localStorage.removeItem(STORAGE)}
 const previousDraw=SamMeshRenderer.prototype.draw;
-SamMeshRenderer.prototype.draw=function(...args){previousDraw.apply(this,args);if(this.ready){if(this.uploadedFrame===args[0]&&this.uploadedMode===args[1])layer.draw(this,...args);layer.updateStatus(args[0])}};
+SamMeshRenderer.prototype.draw=function(...args){const drawn=previousDraw.apply(this,args);if(this.ready){if(this.video.readyState>=2)layer.draw(this,...args);layer.updateStatus(args[0])}return drawn};
 const previousOverlay=window.renderRacketOverlay;
 window.renderRacketOverlay=(ctx,rect,frame)=>{previousOverlay?.(ctx,rect,frame);layer.overlay(ctx,rect,frame)};
 layer.updateStatus();
