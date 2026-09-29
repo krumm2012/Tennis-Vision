@@ -1,4 +1,5 @@
-FROM nginx:1.27-alpine
+ARG VIEWER_BASE_IMAGE=nginx:1.27-alpine
+FROM ${VIEWER_BASE_IMAGE}
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY public/ /usr/share/nginx/html/
 EXPOSE 80

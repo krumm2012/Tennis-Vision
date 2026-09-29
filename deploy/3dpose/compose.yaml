@@ -1,6 +1,9 @@
 services:
   viewer:
-    build: .
+    build:
+      context: .
+      args:
+        VIEWER_BASE_IMAGE: ${VIEWER_BASE_IMAGE:-nginx:1.27-alpine}
     image: tennis-3dpose-viewer:hehaa-3dpose
     container_name: tennis-3dpose-viewer
     restart: unless-stopped

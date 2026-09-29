@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "video_id": "30.56",
+  "fps": 25,
+  "image_size": [1280, 720],
+  "coordinate_system": "original_video_pixels",
+  "frames": [
+    {
+      "frame": 120,
+      "source": "manual_estimate_for_review",
+      "points": {
+        "handle_end": [734, 201],
+        "throat": [699, 183],
+        "tip": [638, 141],
+        "rim_side": [671, 135],
+        "rim_opposite": [653, 177]
+      },
+      "mirror_points": {}
+    }
+  ]
+}

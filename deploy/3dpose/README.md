@@ -8,13 +8,24 @@ cd output/3dpose_docker
 docker compose up -d --build
 ```
 
-The container binds only to `127.0.0.1:18766`. On the existing host Nginx HTTPS server, use:
+The container binds only to `127.0.0.1:18766`. On the existing host Nginx,
+the upstream belongs inside the `http` block:
+
+```nginx
+upstream tennis_3dpose_viewer {
+    server 127.0.0.1:18767 max_fails=1 fail_timeout=5s;
+    server 127.0.0.1:18766 backup;
+}
+```
+
+The HTTPS `server` block uses:
 
 ```nginx
 location = /3dpose { return 301 /3dpose/; }
 location = /3dpose/ { return 302 /3dpose/viewer.html; }
 location /3dpose/ {
-    proxy_pass http://127.0.0.1:18766/;
+    proxy_pass http://tennis_3dpose_viewer/;
+    proxy_next_upstream error timeout http_502 http_503 http_504;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header Accept-Encoding $http_accept_encoding;
@@ -24,8 +35,99 @@ location /3dpose/ {
 }
 ```
 
-The exact `/3dpose/` route opens the Viewer page. The trailing slash in `proxy_pass` removes `/3dpose/` before forwarding. The same server snippet is saved in `host-nginx-location.conf`. The default route remains with the existing service. The published page includes the user-provided video and its derived pose/mesh data; treat the URL as public.
+The exact `/3dpose/` route opens the Viewer page. The trailing slash in `proxy_pass` removes `/3dpose/` before forwarding. The configuration snippets are saved in `host-nginx-upstream.conf` and `host-nginx-location.conf`. The default route remains with the existing service. The published page includes the user-provided video and its derived pose/mesh data; treat the URL as public.
 
-For updates, run `prepare.py`, sync `output/3dpose_docker/` to `/home/ubuntu/tennis-3dpose/` on the host, then run `docker compose up -d --build` there. Test `nginx -t` before reloading the host Nginx if the host snippet changes.
+For updates, run `prepare.py`, copy the generated release into a new directory under `/home/ubuntu/tennis-3dpose-releases/`, build a uniquely tagged image, verify it on a temporary loopback port, then switch the `tennis-3dpose` Compose project to the new release. Keep the previous release and image for rollback. Test `nginx -t` before reloading the host Nginx if the host snippet changes.
 
 The Viewer requests only the current frame from each 55 MB mesh file using HTTP Range. The container serves those ranges directly. It also serves precompressed pose and texture data; the host Nginx compression directives cover proxied responses.
+
+
+## Local Docker release (2026-09-29)
+
+The local deployment includes baseline Viewer, Wilson mesh, v1/v2/v3 comparisons,
+sequence diagnostic Viewer, and the complete native-body/joint-racket candidate.
+`prepare.py` dereferences all candidate asset links and writes a 60-file SHA256
+manifest to both the build folder and `public/release_manifest.json`. Model
+weights, SSH credentials and raw inference archives are not packaged.
+
+Local URLs:
+
+- Baseline: http://127.0.0.1:18766/viewer.html
+- Full candidate: http://127.0.0.1:18766/joint_fit_v4/full/viewer.html
+- Joint diagnostic: http://127.0.0.1:18766/joint_fit_v4/viewer.html
+
+Docker Desktop was started and the existing `tennis-3dpose-viewer` container was
+rebuilt. Docker Hub metadata lookup for the old pinned base stalled; this local
+release uses the already cached `nginx:stable-alpine` image via the configurable
+`VIEWER_BASE_IMAGE` build argument. The local build folder `.env` preserves that
+choice. This section records the local build; the remote publication is below.
+
+```sh
+python3 deploy/3dpose/prepare.py
+VIEWER_BASE_IMAGE=nginx:stable-alpine docker compose -f output/3dpose_docker/compose.yaml up -d --build
+```
+
+HTML, scripts, JSON and binary resources now revalidate with `Cache-Control:
+no-cache`, so same-path dataset updates do not intentionally remain cached for
+an hour. HTTP Range and precompressed pose/texture data remain supported.
+
+Validation: all 60 deployed file hashes and HTTP resources; byte-range responses
+for video, mesh and Wilson model; gzip responses; Nginx configuration and health
+endpoint. Candidate accuracy limitations remain unchanged: orange joints are an
+overlay and have not deformed the hand mesh. This release is bound to local loopback.
+
+## bakewell.cloud release (2026-09-29)
+
+Release `20260929-joint-v4` is stored on the host at
+`/home/ubuntu/tennis-3dpose-releases/20260929-joint-v4/`. It runs as
+`tennis-3dpose-viewer:release-20260929-joint-v4` in the existing
+`tennis-3dpose` Compose project. The host uses its cached
+`nginx:1.27-alpine` base image. The existing host HTTPS reverse proxy serves:
+
+- Baseline: https://bakewell.cloud/3dpose/viewer.html
+- Complete candidate: https://bakewell.cloud/3dpose/joint_fit_v4/full/viewer.html
+- Joint diagnostic: https://bakewell.cloud/3dpose/joint_fit_v4/viewer.html
+
+All 60 staged files matched the local SHA-256 manifest before promotion. The
+temporary container passed Nginx, health, HTTP asset, gzip and byte-range
+checks. After promotion, the production container was healthy, and the six key
+public HTML/JSON resources matched the release manifest byte-for-byte. The
+public mesh and Wilson model returned valid 206 byte-range responses.
+
+For rollback, the former release directory and image tag remain available:
+
+```sh
+ssh ubuntu@124.222.243.71
+cd /home/ubuntu/tennis-3dpose
+docker compose -p tennis-3dpose up -d --no-build --pull never
+```
+
+The release was built from the local working tree at Git commit
+`bcbc0efa78be2898d7524cf90504ce07e5c3eb0b` with uncommitted changes. The
+commit alone does not reproduce this release; use the staged release directory
+and its manifest. This is a static Viewer and needs no cloud GPU at runtime.
+
+## Local Docker through bakewell.cloud (2026-09-29)
+
+The Mac runs the local Docker Viewer on `127.0.0.1:18766`. A macOS LaunchAgent
+keeps an SSH reverse tunnel open from the host's loopback port `18767` to that
+local port. Host Nginx now sends `/3dpose/` to the tunnel first. If the Mac,
+Docker, or tunnel is unavailable, it serves the retained host container on
+`18766`. No host port is exposed publicly for the tunnel.
+
+The checked-in LaunchAgent source is `com.hehaa.tennis-3dpose-tunnel.plist`.
+It is installed at
+`~/Library/LaunchAgents/com.hehaa.tennis-3dpose-tunnel.plist` and loaded in the
+current user's GUI session. It uses the existing SSH key, checks the connection
+every 20 seconds, and restarts after disconnection. The Mac must be powered on,
+awake, logged in, and running Docker for the live local version to appear.
+After editing assets, rebuild the local Docker image and refresh the public
+page; no asset upload to the host is needed. If the Mac is offline, visitors
+still see the last deployed host release.
+
+Validation: the tunnel returned both Viewer pages; public HTML, candidate JSON,
+mesh and Wilson byte ranges succeeded after Nginx switched to the tunnel.
+Temporarily unloading the LaunchAgent yielded a public 200 response from the
+host fallback, then the tunnel was loaded again. The host Nginx configuration
+passed `nginx -t`. The prior configuration is saved on the host at
+`/etc/nginx/nginx.conf.bak-3dpose-local-20260929`.
