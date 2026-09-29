@@ -1,0 +1,8 @@
+{
+  "name": "tennis-sam-viewer",
+  "private": true,
+  "scripts": {
+    "build:vendor": "esbuild tools/vendor-entry.js --bundle --format=iife --global-name=THREE --minify --outfile=vendor/three-0.180.0.min.js"
+  },
+  "devDependencies": { "esbuild": "0.25.10", "three": "0.180.0" }
+}

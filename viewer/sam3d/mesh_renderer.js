@@ -1,31 +1,130 @@
-// SAM native mesh. Texture is source-frame projective mapping, with source-camera depth rejection.
+// Three.js owns all GPU resources; source-camera projection stays in custom GLSL.
 class SamMeshRenderer {
- constructor(canvas,video){this.canvas=canvas;this.video=video;this.gl=canvas.getContext('webgl2',{alpha:true,antialias:true,premultipliedAlpha:false,preserveDrawingBuffer:true});if(!this.gl)throw Error('浏览器不支持 WebGL2');this.ready=false;this.lastFrame=-1;this.meshFrames=new Map();this.meshPending=new Map();this.meshAbort=new Map();this.meshWhole=new Map();}
+ constructor(canvas,video){
+  this.canvas=canvas;this.video=video;this.ready=false;this.meshFrames=new Map();
+  this.meshPending=new Map();this.meshAbort=new Map();this.meshWhole=new Map();this.layers=[];
+  this.renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,premultipliedAlpha:false,preserveDrawingBuffer:true});
+  this.renderer.autoClear=false;this.renderer.outputColorSpace=THREE.SRGBColorSpace;
+  this.renderer.setClearColor(0,0);this.scene=new THREE.Scene();this.bodyScene=new THREE.Scene();
+  this.camera=new THREE.OrthographicCamera(-1,1,1,-1,0,40);
+  this.camera.matrixAutoUpdate=false;this.camera.matrixWorldAutoUpdate=false;
+  this.guides=new THREE.Group();this.guideLines=new Map();
+  this.jointDots=new THREE.Points(new THREE.BufferGeometry(),new THREE.PointsMaterial({vertexColors:true,size:6,depthTest:false}));
+  this.guides.frustumCulled=this.jointDots.frustumCulled=false;this.jointDots.renderOrder=3;
+  this.scene.add(this.guides,this.jointDots);
+ }
+ addLayer(layer){this.layers.push(layer);}
  async frameMesh(file,n){const key=file+':'+n;if(this.meshFrames.has(key)){const value=this.meshFrames.get(key);this.meshFrames.delete(key);this.meshFrames.set(key,value);return value}const count=this.meta.vertices*3;if(this.meshWhole.has(file))return this.meshWhole.get(file).subarray(n*count,(n+1)*count);if(this.meshPending.has(key))return this.meshPending.get(key);const begin=n*count*4,end=begin+count*4-1,controller=new AbortController();this.meshAbort.set(key,controller);const request=fetch(file,{headers:{Range:`bytes=${begin}-${end}`},signal:controller.signal}).then(async r=>{if(!r.ok)throw Error(file+' 下载失败（HTTP '+r.status+'）');const bytes=await r.arrayBuffer();let value;if(r.status===206){if(bytes.byteLength!==count*4)throw Error(file+' 帧数据长度错误');value=new Float32Array(bytes)}else if(r.status===200&&bytes.byteLength% (count*4)===0){const all=new Float32Array(bytes);this.meshWhole.set(file,all);value=all.subarray(n*count,(n+1)*count)}else throw Error(file+' 无法读取网格帧（HTTP '+r.status+'）');this.meshFrames.set(key,value);while(this.meshFrames.size>40)this.meshFrames.delete(this.meshFrames.keys().next().value);this.onFrameReady?.(n);return value}).catch(e=>{if(e.name!=='AbortError')this.onError?.(e,n);throw e}).finally(()=>{this.meshPending.delete(key);this.meshAbort.delete(key)});this.meshPending.set(key,request);return request}
  prefetch(n,files){if(!this.meshAbort)this.meshAbort=new Map();for(const [key,controller] of this.meshAbort){const frame=Number(key.slice(key.lastIndexOf(':')+1));if(frame<n-2||frame>n+12)controller.abort()}const end=Math.min(this.meta.frames-1,n+8);for(const file of new Set(files))for(let frame=n;frame<=end;frame++)this.frameMesh(file,frame).catch(()=>{});}
- async load(){const g=this.gl;this.temporalTexture=new Uint8Array(await fetch('temporal_texture_sam2.bin').then(r=>r.arrayBuffer()));this.meta=await fetch('mesh_meta.json').then(r=>r.json());this.mirror=await fetch('mirror_geometry_frames.json').then(r=>r.json());this.geometry=await fetch('mirror_geometry.json').then(r=>r.json());this.maskImage=new Image();this.maskImage.src='person_masks_sam2.png';await this.maskImage.decode();this.maskStats=await fetch('person_masks_sam2_stats.json').then(r=>{if(!r.ok)throw Error('遮罩统计加载失败');return r.json()});this.faces=new Uint32Array(await fetch('mesh_faces.bin').then(r=>{if(!r.ok)throw Error('网格三角面下载失败');return r.arrayBuffer()}));
- const vs=`#version 300 es
- precision highp float; precision highp int;
- layout(location=2) in vec4 cachedColor;layout(location=3) in vec2 cachedMeta;uniform bool mirrorCacheAllowed;out vec4 priorColor;layout(location=0) in vec3 rawPosition; layout(location=1) in vec3 displayPosition;
- uniform vec3 sourceRoot; uniform float focal; uniform mat3 basis; uniform vec3 shift;uniform vec3 center;uniform vec2 viewport;uniform vec2 angles;uniform float scale;uniform int sourcePass;uniform vec4 mirrorU;uniform vec4 mirrorV;uniform vec3 mirrorDir;uniform vec4 mirrorPlane;
+ async load(){this.temporalTexture=new Uint8Array(await fetch('temporal_texture_sam2.bin').then(r=>r.arrayBuffer()));this.meta=await fetch('mesh_meta.json').then(r=>r.json());this.mirror=await fetch('mirror_geometry_frames.json').then(r=>r.json());this.geometry=await fetch('mirror_geometry.json').then(r=>r.json());this.maskImage=new Image();this.maskImage.src='person_masks_sam2.png';await this.maskImage.decode();this.maskStats=await fetch('person_masks_sam2_stats.json').then(r=>{if(!r.ok)throw Error('遮罩统计加载失败');return r.json()});this.faces=new Uint32Array(await fetch('mesh_faces.bin').then(r=>{if(!r.ok)throw Error('网格三角面下载失败');return r.arrayBuffer()}));
+ const vs=` precision highp float; precision highp int;
+ in vec4 cachedColor;in vec2 cachedMeta;uniform bool mirrorCacheAllowed;out vec4 priorColor;in vec3 rawPosition; in vec3 displayPosition;
+ uniform mat4 projectionMatrix;uniform mat4 viewMatrix;uniform vec3 sourceRoot; uniform float focal; uniform mat3 basis; uniform vec3 shift;uniform vec3 center;uniform vec2 viewport;uniform vec2 angles;uniform float scale;uniform int sourcePass;uniform vec4 mirrorU;uniform vec4 mirrorV;uniform vec3 mirrorDir;uniform vec4 mirrorPlane;
  out vec3 originalCamera;
  vec4 sourceClip(vec3 p){float n=.1,f=100.;return vec4(2.*focal*p.x/1280.,-2.*focal*p.y/720.,(f+n)/(f-n)*p.z-2.*f*n/(f-n),p.z);}
- void main(){float ca=cachedColor.a;if(cachedMeta.x>1.5&&!mirrorCacheAllowed)ca=0.;priorColor=vec4(cachedColor.rgb*ca,ca);originalCamera=rawPosition+sourceRoot;if(sourcePass==1){gl_Position=sourceClip(originalCamera);return;}if(sourcePass==2){vec3 reflected=originalCamera-2.*(dot(originalCamera,mirrorPlane.xyz)-mirrorPlane.w)*mirrorPlane.xyz;gl_Position=sourceClip(reflected);return;}vec3 p=basis*displayPosition+shift-center;float cy=cos(angles.x),sy=sin(angles.x),cp=cos(angles.y),sp=sin(angles.y);float x=p.x*cy+p.z*sy,z=-p.x*sy+p.z*cy,y=p.y*cp-z*sp,depth=p.y*sp+z*cp;gl_Position=vec4(x*scale*2./viewport.x,y*scale*2./viewport.y,-depth/20.,1.);}`;
- const fs=`#version 300 es
- precision highp float; precision highp int;in vec4 priorColor;uniform bool temporalEnabled;uniform bool statsPass;in vec3 originalCamera;uniform highp sampler2D frameTexture;uniform highp sampler2D sourceDepth;uniform float focal;uniform int sourcePass;uniform vec4 mirrorU;uniform vec4 mirrorV;uniform vec3 mirrorDir;uniform vec4 mirrorPlane;uniform bool textured;uniform bool mirrorEnabled;uniform highp sampler2D mirrorDepth;uniform vec3 sourceRoot;uniform highp sampler2D personMasks;uniform vec2 maskTile;uniform bool maskEnabled;uniform bool diagnostic;out vec4 color;
+ void main(){float ca=cachedColor.a;if(cachedMeta.x>1.5&&!mirrorCacheAllowed)ca=0.;priorColor=vec4(cachedColor.rgb*ca,ca);originalCamera=rawPosition+sourceRoot;if(sourcePass==1){gl_Position=sourceClip(originalCamera);return;}if(sourcePass==2){vec3 reflected=originalCamera-2.*(dot(originalCamera,mirrorPlane.xyz)-mirrorPlane.w)*mirrorPlane.xyz;gl_Position=sourceClip(reflected);return;}gl_Position=projectionMatrix*viewMatrix*vec4(basis*displayPosition+shift,1.);}`;
+ const fs=` precision highp float; precision highp int;in vec4 priorColor;uniform bool temporalEnabled;uniform bool statsPass;in vec3 originalCamera;uniform highp sampler2D frameTexture;uniform highp sampler2D sourceDepth;uniform float focal;uniform int sourcePass;uniform vec4 mirrorU;uniform vec4 mirrorV;uniform vec3 mirrorDir;uniform vec4 mirrorPlane;uniform bool textured;uniform bool mirrorEnabled;uniform highp sampler2D mirrorDepth;uniform vec3 sourceRoot;uniform highp sampler2D personMasks;uniform vec2 maskTile;uniform bool maskEnabled;uniform bool diagnostic;out vec4 color;
 vec2 maskUV(vec2 uv){return (vec2(maskTile.x,15.-maskTile.y)+clamp(uv,vec2(.5/640.,.5/360.),vec2(1.-.5/640.,1.-.5/360.)))/16.;}
  void main(){if(sourcePass!=0){color=vec4(0.);return;}vec3 p=originalCamera;vec2 uv=vec2(.5+focal*p.x/(1280.*p.z),.5-focal*p.y/(720.*p.z));float n=.1,f=100.;float depth=.5*((f+n)/(f-n)-2.*f*n/((f-n)*p.z))+.5;bool valid=p.z>0.&&all(greaterThanEqual(uv,vec2(0.)))&&all(lessThanEqual(uv,vec2(1.)));float seen=texture(sourceDepth,clamp(uv,vec2(0.),vec2(1.))).r;valid=valid&&depth<=seen+.000018;valid=valid&&(!maskEnabled||texture(personMasks,maskUV(uv)).r>.55);float directWeight=valid?(maskEnabled?smoothstep(.55,.85,texture(personMasks,maskUV(uv)).r):1.):0.;float mirrorWeight=0.;vec3 mirrorColor=vec3(0.);bool mirrorValid=false;if(mirrorEnabled&&directWeight<1.){vec3 reflected=p-2.*(dot(p,mirrorPlane.xyz)-mirrorPlane.w)*mirrorPlane.xyz;vec2 muv=vec2(.5+focal*reflected.x/(1280.*reflected.z),.5-focal*reflected.y/(720.*reflected.z));float md=.5*((f+n)/(f-n)-2.*f*n/((f-n)*reflected.z))+.5;mirrorValid=muv.x>.42&&muv.x<.76&&muv.y>.68&&muv.y<1.&&md<=texture(mirrorDepth,muv).r+.000018&&texture(sourceDepth,muv).r>.9999&&(!maskEnabled||texture(personMasks,maskUV(muv)).g>.55);mirrorColor=texture(frameTexture,muv).rgb;mirrorWeight=mirrorValid?(maskEnabled?smoothstep(.55,.85,texture(personMasks,maskUV(muv)).g):1.):0.;}vec3 normal=normalize(cross(dFdx(p),dFdy(p)));float light=.48+.52*abs(dot(normal,normalize(vec3(-.4,-.6,-1.))));vec3 neutral=vec3(.40,.48,.56)*light;float dw=textured?directWeight:0.,mw=textured?mirrorWeight*(1.-dw):0.;float cw=(textured&&temporalEnabled&&maskEnabled)?min(.85,priorColor.a)*(1.-dw-mw):0.;float remaining=max(0.,1.-dw-mw-cw);if(diagnostic){color=statsPass?vec4(dw,mw,remaining,cw):vec4(dw+cw,mw+cw,remaining,1.);return;}vec3 cached=priorColor.rgb/max(priorColor.a,.0001);color=vec4(texture(frameTexture,uv).rgb*dw+mirrorColor*mw+cached*cw+neutral*remaining,1.);}`;
- const shader=(type,src)=>{const s=g.createShader(type);g.shaderSource(s,src);g.compileShader(s);if(!g.getShaderParameter(s,g.COMPILE_STATUS))throw Error(g.getShaderInfoLog(s));return s};this.program=g.createProgram();g.attachShader(this.program,shader(g.VERTEX_SHADER,vs));g.attachShader(this.program,shader(g.FRAGMENT_SHADER,fs));g.linkProgram(this.program);if(!g.getProgramParameter(this.program,g.LINK_STATUS))throw Error(g.getProgramInfoLog(this.program));g.useProgram(this.program);this.u={};for(let n of ['mirrorCacheAllowed','temporalEnabled','statsPass','diagnostic','mirrorPlane','personMasks','maskTile','maskEnabled','sourceRoot','focal','basis','shift','center','viewport','angles','scale','sourcePass','mirrorU','mirrorV','mirrorDir','mirrorEnabled','mirrorDepth','frameTexture','sourceDepth','textured'])this.u[n]=g.getUniformLocation(this.program,n);
- this.vao=g.createVertexArray();g.bindVertexArray(this.vao);this.buffers=[0,1].map(i=>{let b=g.createBuffer();g.bindBuffer(g.ARRAY_BUFFER,b);g.enableVertexAttribArray(i);g.vertexAttribPointer(i,3,g.FLOAT,false,0,0);return b});this.cacheBuffer=g.createBuffer();g.bindBuffer(g.ARRAY_BUFFER,this.cacheBuffer);g.enableVertexAttribArray(2);g.vertexAttribPointer(2,4,g.UNSIGNED_BYTE,true,6,0);g.enableVertexAttribArray(3);g.vertexAttribPointer(3,2,g.UNSIGNED_BYTE,false,6,4);let ib=g.createBuffer();g.bindBuffer(g.ELEMENT_ARRAY_BUFFER,ib);g.bufferData(g.ELEMENT_ARRAY_BUFFER,this.faces,g.STATIC_DRAW);
- this.texture=g.createTexture();g.activeTexture(g.TEXTURE0);g.bindTexture(g.TEXTURE_2D,this.texture);for(let p of [g.TEXTURE_MIN_FILTER,g.TEXTURE_MAG_FILTER])g.texParameteri(g.TEXTURE_2D,p,g.LINEAR);for(let p of [g.TEXTURE_WRAP_S,g.TEXTURE_WRAP_T])g.texParameteri(g.TEXTURE_2D,p,g.CLAMP_TO_EDGE);
- this.depth=g.createTexture();g.activeTexture(g.TEXTURE1);g.bindTexture(g.TEXTURE_2D,this.depth);g.texImage2D(g.TEXTURE_2D,0,g.DEPTH_COMPONENT24,1280,720,0,g.DEPTH_COMPONENT,g.UNSIGNED_INT,null);for(let p of [g.TEXTURE_MIN_FILTER,g.TEXTURE_MAG_FILTER])g.texParameteri(g.TEXTURE_2D,p,g.NEAREST);for(let p of [g.TEXTURE_WRAP_S,g.TEXTURE_WRAP_T])g.texParameteri(g.TEXTURE_2D,p,g.CLAMP_TO_EDGE);this.fbo=g.createFramebuffer();g.bindFramebuffer(g.FRAMEBUFFER,this.fbo);g.framebufferTexture2D(g.FRAMEBUFFER,g.DEPTH_ATTACHMENT,g.TEXTURE_2D,this.depth,0);g.drawBuffers([g.NONE]);g.readBuffer(g.NONE);if(g.checkFramebufferStatus(g.FRAMEBUFFER)!==g.FRAMEBUFFER_COMPLETE)throw Error('深度缓冲初始化失败');g.bindFramebuffer(g.FRAMEBUFFER,null);this.mirrorDepth=g.createTexture();g.activeTexture(g.TEXTURE2);g.bindTexture(g.TEXTURE_2D,this.mirrorDepth);g.texImage2D(g.TEXTURE_2D,0,g.DEPTH_COMPONENT24,1280,720,0,g.DEPTH_COMPONENT,g.UNSIGNED_INT,null);for(let p of [g.TEXTURE_MIN_FILTER,g.TEXTURE_MAG_FILTER])g.texParameteri(g.TEXTURE_2D,p,g.NEAREST);for(let p of [g.TEXTURE_WRAP_S,g.TEXTURE_WRAP_T])g.texParameteri(g.TEXTURE_2D,p,g.CLAMP_TO_EDGE);this.mirrorFbo=g.createFramebuffer();g.bindFramebuffer(g.FRAMEBUFFER,this.mirrorFbo);g.framebufferTexture2D(g.FRAMEBUFFER,g.DEPTH_ATTACHMENT,g.TEXTURE_2D,this.mirrorDepth,0);g.drawBuffers([g.NONE]);g.readBuffer(g.NONE);g.bindFramebuffer(g.FRAMEBUFFER,null);this.maskTexture=g.createTexture();g.activeTexture(g.TEXTURE3);g.bindTexture(g.TEXTURE_2D,this.maskTexture);g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL,true);g.texImage2D(g.TEXTURE_2D,0,g.RGB,g.RGB,g.UNSIGNED_BYTE,this.maskImage);for(let p of [g.TEXTURE_MIN_FILTER,g.TEXTURE_MAG_FILTER])g.texParameteri(g.TEXTURE_2D,p,g.LINEAR);for(let p of [g.TEXTURE_WRAP_S,g.TEXTURE_WRAP_T])g.texParameteri(g.TEXTURE_2D,p,g.CLAMP_TO_EDGE);this.statsFbo=g.createFramebuffer();g.bindFramebuffer(g.FRAMEBUFFER,this.statsFbo);const color=g.createRenderbuffer();g.bindRenderbuffer(g.RENDERBUFFER,color);g.renderbufferStorage(g.RENDERBUFFER,g.RGBA8,160,120);g.framebufferRenderbuffer(g.FRAMEBUFFER,g.COLOR_ATTACHMENT0,g.RENDERBUFFER,color);const depth=g.createRenderbuffer();g.bindRenderbuffer(g.RENDERBUFFER,depth);g.renderbufferStorage(g.RENDERBUFFER,g.DEPTH_COMPONENT24,160,120);g.framebufferRenderbuffer(g.FRAMEBUFFER,g.DEPTH_ATTACHMENT,g.RENDERBUFFER,depth);g.drawBuffers([g.COLOR_ATTACHMENT0]);g.readBuffer(g.COLOR_ATTACHMENT0);if(g.checkFramebufferStatus(g.FRAMEBUFFER)!==g.FRAMEBUFFER_COMPLETE)throw Error('覆盖率缓冲初始化失败');g.bindFramebuffer(g.FRAMEBUFFER,null);this.statsPixels=new Uint8Array(160*120*4);this.ready=true;}
- draw(n,mode,basis,shift,center,angles,scale,rect,textured=true,useMirror=false,useMask=true){if(!this.ready||this.video.readyState<2)return false;const g=this.gl,d=devicePixelRatio||1;const width=Math.round(rect.width*d),height=Math.round(rect.height*d);if(this.canvas.width!==width)this.canvas.width=width;if(this.canvas.height!==height)this.canvas.height=height;const displayFile=mode==='temporal'?'mesh_temporal.bin':mode==='refined'?'mesh_refined.bin':mode==='raw'?'mesh_local.bin':'mesh_smooth.bin',count=this.meta.vertices*3;this.prefetch(n,['mesh_local.bin',displayFile]);const frame=file=>this.meshFrames.get(file+':'+n)||this.meshWhole.get(file)?.subarray(n*count,(n+1)*count);const raw=frame('mesh_local.bin'),display=frame(displayFile);if(!raw||!display)return false;g.useProgram(this.program);g.bindVertexArray(this.vao);for(let i=0;i<2;i++){if(this.uploadedFrame===n&&(i===0||this.uploadedMode===mode))continue;g.bindBuffer(g.ARRAY_BUFFER,this.buffers[i]);g.bufferData(g.ARRAY_BUFFER,i===0?raw:display,g.DYNAMIC_DRAW)}
- if(this.uploadedFrame!==n){g.bindBuffer(g.ARRAY_BUFFER,this.cacheBuffer);g.bufferData(g.ARRAY_BUFFER,this.temporalTexture.subarray(n*this.meta.vertices*6,(n+1)*this.meta.vertices*6),g.DYNAMIC_DRAW);}this.uploadedFrame=n;this.uploadedMode=mode;g.uniform1i(this.u.temporalEnabled,this.useTemporalTexture?1:0);g.uniform1i(this.u.statsPass,0);g.uniform3fv(this.u.sourceRoot,this.meta.source_roots[n]);g.uniform1f(this.u.focal,this.meta.focal[n]);g.uniformMatrix3fv(this.u.basis,false,basis.flat());g.uniform3fv(this.u.shift,shift);g.uniform3fv(this.u.center,center);g.uniform2fv(this.u.viewport,[rect.width,rect.height]);g.uniform2fv(this.u.angles,angles);g.uniform1f(this.u.scale,scale);g.uniform1i(this.u.diagnostic,this.showSources?1:0);g.uniform1i(this.u.textured,textured?1:0);g.uniform1i(this.u.frameTexture,0);g.uniform1i(this.u.sourceDepth,1);g.uniform1i(this.u.mirrorDepth,2);const mirror=this.mirror[n],enabled=!!(useMirror&&this.maskStats[n].mirror>0);g.uniform1i(this.u.mirrorEnabled,enabled?1:0);g.uniform1i(this.u.mirrorCacheAllowed,useMirror?1:0);g.uniform4fv(this.u.mirrorPlane,[...this.geometry.normal_camera,this.geometry.distance_camera_m]);g.uniform1i(this.u.personMasks,3);g.uniform2fv(this.u.maskTile,[n%16,Math.floor(n/16)]);g.uniform1i(this.u.maskEnabled,useMask?1:0);g.activeTexture(g.TEXTURE3);g.bindTexture(g.TEXTURE_2D,this.maskTexture);
- g.activeTexture(g.TEXTURE0);g.bindTexture(g.TEXTURE_2D,this.texture);g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL,true);g.texImage2D(g.TEXTURE_2D,0,g.RGB,g.RGB,g.UNSIGNED_BYTE,this.video);g.enable(g.DEPTH_TEST);g.disable(g.CULL_FACE);g.depthFunc(g.LEQUAL);
- // Avoid sampling an attached texture during the depth pass.
- g.activeTexture(g.TEXTURE2);g.bindTexture(g.TEXTURE_2D,null);g.activeTexture(g.TEXTURE1);g.bindTexture(g.TEXTURE_2D,null);g.bindFramebuffer(g.FRAMEBUFFER,this.fbo);g.viewport(0,0,1280,720);g.clearDepth(1);g.clear(g.DEPTH_BUFFER_BIT);g.uniform1i(this.u.sourcePass,1);g.drawElements(g.TRIANGLES,this.faces.length,g.UNSIGNED_INT,0);
- if(enabled){g.bindFramebuffer(g.FRAMEBUFFER,this.mirrorFbo);g.clear(g.DEPTH_BUFFER_BIT);g.uniform1i(this.u.sourcePass,2);g.drawElements(g.TRIANGLES,this.faces.length,g.UNSIGNED_INT,0);}g.bindFramebuffer(g.FRAMEBUFFER,null);g.activeTexture(g.TEXTURE2);g.bindTexture(g.TEXTURE_2D,this.mirrorDepth);g.activeTexture(g.TEXTURE1);g.bindTexture(g.TEXTURE_2D,this.depth);g.viewport(0,0,this.canvas.width,this.canvas.height);g.clearColor(0,0,0,0);g.clear(g.COLOR_BUFFER_BIT|g.DEPTH_BUFFER_BIT);g.uniform1i(this.u.sourcePass,0);g.drawElements(g.TRIANGLES,this.faces.length,g.UNSIGNED_INT,0);
- if(this.video.paused||!this.statsTime||performance.now()-this.statsTime>250){g.bindFramebuffer(g.FRAMEBUFFER,this.statsFbo);g.viewport(0,0,160,120);g.clear(g.COLOR_BUFFER_BIT|g.DEPTH_BUFFER_BIT);g.uniform1i(this.u.statsPass,1);g.uniform1i(this.u.diagnostic,1);g.drawElements(g.TRIANGLES,this.faces.length,g.UNSIGNED_INT,0);g.readPixels(0,0,160,120,g.RGBA,g.UNSIGNED_BYTE,this.statsPixels);let total=0,real=0,mirror=0,gray=0,temporal=0;for(let k=0;k<this.statsPixels.length;k+=4){if(this.statsPixels[k]+this.statsPixels[k+1]+this.statsPixels[k+2]+this.statsPixels[k+3]>0){total++;temporal+=this.statsPixels[k+3]/255;real+=this.statsPixels[k]/255;mirror+=this.statsPixels[k+1]/255;gray+=this.statsPixels[k+2]/255;}}this.coverage={frame:n,total,temporal:total?temporal/total:0,real:total?real/total:0,mirror:total?mirror/total:0,gray:total?gray/total:0};this.statsTime=performance.now();g.bindFramebuffer(g.FRAMEBUFFER,null);g.viewport(0,0,this.canvas.width,this.canvas.height);g.uniform1i(this.u.statsPass,0);g.uniform1i(this.u.diagnostic,this.showSources?1:0);}
-
- return true}
+ const uniform=value=>({value});
+ this.u={
+  sourceRoot:uniform(new THREE.Vector3()),focal:uniform(1),basis:uniform(new THREE.Matrix3()),
+  shift:uniform(new THREE.Vector3()),center:uniform(new THREE.Vector3()),viewport:uniform(new THREE.Vector2()),
+  angles:uniform(new THREE.Vector2()),scale:uniform(1),sourcePass:uniform(0),
+  mirrorPlane:uniform(new THREE.Vector4()),mirrorU:uniform(new THREE.Vector4()),mirrorV:uniform(new THREE.Vector4()),mirrorDir:uniform(new THREE.Vector3()),
+  textured:uniform(true),mirrorEnabled:uniform(false),mirrorCacheAllowed:uniform(false),
+  temporalEnabled:uniform(false),maskEnabled:uniform(true),diagnostic:uniform(false),statsPass:uniform(false),maskTile:uniform(new THREE.Vector2())
+ };
+ this.geometryBuffer=new THREE.BufferGeometry();
+ for(const name of ['rawPosition','displayPosition'])this.geometryBuffer.setAttribute(name,new THREE.BufferAttribute(new Float32Array(this.meta.vertices*3),3).setUsage(THREE.DynamicDrawUsage));
+ this.cacheArray=new Uint8Array(this.meta.vertices*6);
+ this.cacheBuffer=new THREE.InterleavedBuffer(this.cacheArray,6).setUsage(THREE.DynamicDrawUsage);
+ this.geometryBuffer.setAttribute('cachedColor',new THREE.InterleavedBufferAttribute(this.cacheBuffer,4,0,true));
+ this.geometryBuffer.setAttribute('cachedMeta',new THREE.InterleavedBufferAttribute(this.cacheBuffer,2,4,false));
+ this.geometryBuffer.setIndex(new THREE.BufferAttribute(this.faces,1));
+ this.texture=new THREE.VideoTexture(this.video);this.texture.flipY=true;this.texture.colorSpace=THREE.NoColorSpace;
+ this.maskTexture=new THREE.Texture(this.maskImage);this.maskTexture.flipY=true;this.maskTexture.colorSpace=THREE.NoColorSpace;
+ this.maskTexture.minFilter=this.maskTexture.magFilter=THREE.LinearFilter;this.maskTexture.generateMipmaps=false;this.maskTexture.needsUpdate=true;
+ const depthTarget=()=>{const target=new THREE.WebGLRenderTarget(1280,720,{depthBuffer:true});target.depthTexture=new THREE.DepthTexture(1280,720,THREE.UnsignedIntType);return target;};
+ this.sourceTarget=depthTarget();this.mirrorTarget=depthTarget();
+ this.statsTarget=new THREE.WebGLRenderTarget(160,120,{depthBuffer:true});
+ Object.assign(this.u,{frameTexture:uniform(this.texture),personMasks:uniform(this.maskTexture),sourceDepth:uniform(null),mirrorDepth:uniform(null)});
+ this.material=new THREE.RawShaderMaterial({vertexShader:vs,fragmentShader:fs,uniforms:this.u,glslVersion:THREE.GLSL3,side:THREE.DoubleSide,blending:THREE.NoBlending});
+ this.body=new THREE.Mesh(this.geometryBuffer,this.material);this.body.frustumCulled=false;this.body.renderOrder=0;this.scene.add(this.body);
+ this.passBody=new THREE.Mesh(this.geometryBuffer,this.material);this.passBody.frustumCulled=false;this.bodyScene.add(this.passBody);
+ this.statsPixels=new Uint8Array(160*120*4);this.ready=true;
+ }
+ async ensureFrame(n,mode){
+  const file=this.displayFile(mode);await Promise.all([...new Set(['mesh_local.bin',file])].map(file=>this.frameMesh(file,n)));
+ }
+ displayFile(mode){return mode==='temporal'?'mesh_temporal.bin':mode==='refined'?'mesh_refined.bin':mode==='raw'?'mesh_local.bin':'mesh_smooth.bin';}
+ setGuides(segments,points){
+  const groups=new Map();
+  for(const row of segments){const key=JSON.stringify([row.width||1,row.dashed||false]);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);}
+  for(const [key,line] of this.guideLines)line.visible=groups.has(key);
+  const arrays=rows=>{const positions=[],colors=[];for(const row of rows){const color=new THREE.Color(row.color);for(const p of row.points){positions.push(...p);colors.push(color.r,color.g,color.b);}}return{positions,colors};};
+  for(const [key,rows] of groups){
+   let line=this.guideLines.get(key);const [width,dashed]=JSON.parse(key);
+   if(!line){line=new THREE.LineSegments2(new THREE.LineSegmentsGeometry(),new THREE.LineMaterial({vertexColors:true,linewidth:width,dashed,dashSize:.025,gapSize:.025}));line.frustumCulled=false;this.guideLines.set(key,line);this.guides.add(line);}
+   const {positions,colors}=arrays(rows);line.geometry.dispose();line.geometry=new THREE.LineSegmentsGeometry();line.geometry.setPositions(positions);line.geometry.setColors(colors);line.computeLineDistances();line.visible=true;
+  }
+  const {positions,colors}=arrays(points);this.jointDots.geometry.dispose();this.jointDots.geometry=new THREE.BufferGeometry();this.jointDots.geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));this.jointDots.geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+ }
+ setView(center,angles,scale,rect){
+  const [yaw,pitch]=angles,cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+  const x=[cy,0,sy],y=[sp*sy,cp,-sp*cy],z=[-cp*sy,sp,cp*cy],dot=a=>a.reduce((s,v,i)=>s+v*center[i],0);
+  this.camera.matrixWorldInverse.set(...x,-dot(x),...y,-dot(y),...z,-dot(z)-20,0,0,0,1);
+  this.camera.matrixWorld.copy(this.camera.matrixWorldInverse).invert();
+  Object.assign(this.camera,{left:-rect.width/(2*scale),right:rect.width/(2*scale),top:rect.height/(2*scale),bottom:-rect.height/(2*scale)});this.camera.updateProjectionMatrix();
+ }
+ draw(n,mode,basis,shift,center,angles,scale,rect,textured=true,useMirror=false,useMask=true,bodyVisible=true){
+  if(!this.ready||this.video.readyState<2)return false;
+  const file=this.displayFile(mode),count=this.meta.vertices*3;
+  if(bodyVisible)this.prefetch(n,['mesh_local.bin',file]);
+  const frame=file=>this.meshFrames.get(file+':'+n)||this.meshWhole.get(file)?.subarray(n*count,(n+1)*count);
+  const raw=frame('mesh_local.bin'),display=frame(file);if(bodyVisible&&(!raw||!display))return false;
+  const renderer=this.renderer,u=this.u,d=devicePixelRatio||1;
+  // Upload even for an already-decoded first frame or a paused seek.
+  this.texture.needsUpdate=true;
+  if(this.canvas.width!==Math.round(rect.width*d)||this.canvas.height!==Math.round(rect.height*d)){
+   renderer.setPixelRatio(d);renderer.setSize(rect.width,rect.height,false);
+  }
+  if(bodyVisible&&this.uploadedFrame!==n){const attr=this.geometryBuffer.getAttribute('rawPosition');attr.array.set(raw);attr.needsUpdate=true;this.cacheArray.set(this.temporalTexture.subarray(n*this.meta.vertices*6,(n+1)*this.meta.vertices*6));this.cacheBuffer.needsUpdate=true;}
+  if(bodyVisible&&(this.uploadedFrame!==n||this.uploadedMode!==mode)){const attr=this.geometryBuffer.getAttribute('displayPosition');attr.array.set(display);attr.needsUpdate=true;}
+  if(bodyVisible){this.uploadedFrame=n;this.uploadedMode=mode;}
+  this.body.visible=bodyVisible;this.setView(center,angles,scale,rect);
+  for(const line of this.guideLines.values())line.material.resolution.set(rect.width,rect.height);
+  u.sourceRoot.value.fromArray(this.meta.source_roots[n]);u.focal.value=this.meta.focal[n];u.basis.value.fromArray(basis.flat());
+  u.shift.value.fromArray(shift);u.center.value.fromArray(center);u.viewport.value.set(rect.width,rect.height);u.angles.value.fromArray(angles);u.scale.value=scale;
+  const enabled=!!(useMirror&&this.maskStats[n].mirror>0);
+  u.temporalEnabled.value=!!this.useTemporalTexture;u.textured.value=textured;u.mirrorEnabled.value=enabled;u.mirrorCacheAllowed.value=useMirror;
+  u.maskEnabled.value=useMask;u.maskTile.value.set(n%16,Math.floor(n/16));u.mirrorPlane.value.fromArray([...this.geometry.normal_camera,this.geometry.distance_camera_m]);
+  u.diagnostic.value=!!this.showSources;u.statsPass.value=false;
+  if(bodyVisible){
+  // Never sample the texture attached to the current depth target.
+  u.sourceDepth.value=null;u.mirrorDepth.value=null;u.sourcePass.value=1;
+  renderer.setRenderTarget(this.sourceTarget);renderer.clear();renderer.render(this.bodyScene,this.camera);
+  if(enabled){u.sourcePass.value=2;renderer.setRenderTarget(this.mirrorTarget);renderer.clear();renderer.render(this.bodyScene,this.camera);}
+  u.sourcePass.value=0;u.sourceDepth.value=this.sourceTarget.depthTexture;u.mirrorDepth.value=this.mirrorTarget.depthTexture;
+  }
+  for(const layer of this.layers)layer.update(this,n,mode);
+  renderer.setRenderTarget(null);renderer.clear();renderer.render(this.scene,this.camera);
+  if(bodyVisible&&(this.video.paused||!this.statsTime||performance.now()-this.statsTime>250)){
+   u.statsPass.value=true;u.diagnostic.value=true;
+   renderer.setRenderTarget(this.statsTarget);renderer.clear();renderer.render(this.bodyScene,this.camera);
+   renderer.readRenderTargetPixels(this.statsTarget,0,0,160,120,this.statsPixels);
+   let total=0,real=0,mirror=0,gray=0,temporal=0;
+   for(let k=0;k<this.statsPixels.length;k+=4){if(this.statsPixels[k]+this.statsPixels[k+1]+this.statsPixels[k+2]+this.statsPixels[k+3]>0){total++;real+=this.statsPixels[k]/255;mirror+=this.statsPixels[k+1]/255;gray+=this.statsPixels[k+2]/255;temporal+=this.statsPixels[k+3]/255;}}
+   this.coverage={frame:n,total,real:total?real/total:0,mirror:total?mirror/total:0,gray:total?gray/total:0,temporal:total?temporal/total:0};
+   this.statsTime=performance.now();renderer.setRenderTarget(null);u.statsPass.value=false;u.diagnostic.value=!!this.showSources;
+  }
+  return true;
+ }
+ dispose(){
+  for(const controller of this.meshAbort.values())controller.abort();
+  for(const layer of this.layers)layer.dispose?.();
+  for(const resource of [this.geometryBuffer,this.material,this.texture,this.maskTexture,this.sourceTarget,this.mirrorTarget,this.statsTarget])resource?.dispose();
+  for(const object of [...this.guideLines.values(),this.jointDots]){object.geometry.dispose();object.material.dispose();}
+  this.renderer.dispose();this.ready=false;
+ }
 }

@@ -50,3 +50,56 @@ python3 scripts/install_sam3d_viewer.py
 依次运行 `prepare_wilson_model.py`、`fit_wilson_sequence.py`、`audit_wilson_upgrade.py`（均在viewer/sam3d中）。前者读取Downloads中的Wilson小版GLB；后两者读取output/sam3d_cloud，保留racket_poses_v1.json并输出racket_poses_v2.json。验证后将v2复制为racket_poses.json并运行安装脚本；Viewer提供上一版对比按钮。模型长度及掌内握点仍为待确认初值，具体限制见WILSON_MODEL_UPGRADE_ASSESSMENT.md。
 
 离线对比导出：`python3 viewer/sam3d/export_pose_comparison.py --poses racket_poses_v2.json --out output/sam3d_cloud/real_vs_wilson_v2_overhead.mp4`。
+
+# Three.js renderer migration
+
+The baseline and full joint-fit Viewer use Three.js 0.180.0 for all 3D drawing.
+The video annotations and explanatory text remain Canvas 2D overlays.
+
+- `mesh_renderer.js` owns the Three.js renderer, orthographic display camera,
+  scene, dynamic body geometry, source-camera depth targets, video and mask
+  textures, guides, and coverage sampling target.
+- The body uses a custom GLSL material to retain the existing camera-projective
+  texture, person-mask rejection, mirror-depth rejection and temporal colors.
+  The source-camera passes retain their calibrated perspective projection.
+- `racket_renderer.js` registers an independent scene layer. Racket and optional
+  hand joints share the body display transform and camera, without patching
+  the body renderer or touching native WebGL state.
+- Missing body frames preserve the previous complete scene and pause playback.
+  The matching video texture is uploaded before the completed scene is drawn.
+  Skeleton-only mode does not require a body mesh frame.
+- `texture_audit.js` waits for both required mesh arrays before sampling each
+  frame, so its coverage report cannot accidentally reuse a previous frame.
+
+## Dependency and build
+
+The checked-in `vendor/` bundle and MIT license are served from the same origin
+as the Viewer. There is no runtime CDN dependency. To reproduce the bundle:
+
+```sh
+cd viewer/sam3d
+npm ci
+npm run build:vendor
+```
+
+`tools/vendor-entry.js` includes Three.js and its wide-line scene objects.
+The package lock fixes the Three.js and esbuild versions. The installer and
+Docker packager copy the vendor files into both Viewer routes.
+
+## Verification
+
+```sh
+node viewer/sam3d/test_orientation.cjs
+node viewer/sam3d/test_mesh_playback.js
+```
+
+The orientation test executes the actual Three.js camera matrices for 96
+combinations and compares them with the established projection and depth
+convention. The playback test verifies missing frames are prefetched without
+clearing the displayed scene. Browser verification must additionally cover
+shader compilation, textured and gray meshes, front/back views, skeleton and
+combined modes, racket visibility, video playback/seeking and the 250-frame
+texture audit on both baseline and candidate pages.
+
+Regenerate and package with `viewer/sam3d/joint_fit/build_full_viewer.py` and
+`deploy/3dpose/prepare.py`. See `deploy/3dpose/README.md` for deployment.

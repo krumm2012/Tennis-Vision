@@ -140,7 +140,15 @@ passed `nginx -t`. The prior configuration is saved on the host at
 `/etc/nginx/nginx.conf.bak-3dpose-local-20260929`.
 
 The current host release is
-`/home/ubuntu/tennis-3dpose-releases/20260930-buffered-v2/`, image
-`tennis-3dpose-viewer:release-20260930-buffered-v2`. The previous Nginx
+`/home/ubuntu/tennis-3dpose-releases/20260930-threejs/`, image
+`tennis-3dpose-viewer:release-20260930-threejs`. The previous Nginx
 configuration is saved at `/etc/nginx/nginx.conf.bak-3dpose-direct-20260930`;
 older release directories and image tags remain available for rollback.
+
+This release replaces direct WebGL rendering with Three.js 0.180.0 for the
+body, racket, hand joints, ground, trajectory and skeleton. The library and
+license are packaged at both routes; no external CDN is required. Both local
+250-frame texture audits completed with matching frame IDs and visible mesh
+coverage on every frame, including mirror and temporal texture paths. Camera
+regression checks cover 96 view/point combinations. The previous
+`20260930-buffered-v2` release remains the rollback target.

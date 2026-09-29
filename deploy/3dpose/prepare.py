@@ -76,6 +76,10 @@ def prepare() -> Path:
         elif not origin.is_file() and name in FILES:
             origin = DATA / name
         package(origin, 'joint_fit_v4/full/' + name)
+    for asset in sorted((SOURCE / 'vendor').iterdir()):
+        if asset.is_file():
+            package(asset, 'vendor/' + asset.name)
+            package(asset, 'joint_fit_v4/full/vendor/' + asset.name)
     # Expose the exact content inventory for deployment verification.
     (public / 'release_manifest.json').write_text(json.dumps(manifest, indent=2))
     for name in ('Dockerfile', 'nginx.conf', 'compose.yaml'):

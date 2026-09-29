@@ -10,6 +10,7 @@ def install(destination: Path) -> None:
     for path in source.iterdir():
         if path.suffix in {'.html', '.js', '.py'}:
             shutil.copy2(path, destination / path.name)
+    shutil.copytree(source / 'vendor', destination / 'vendor', dirs_exist_ok=True)
     # Static diagnostic UI only; candidate data stays separate and is never promoted.
     diagnostic = destination / 'joint_fit_v4'
     diagnostic.mkdir(exist_ok=True)
