@@ -109,23 +109,28 @@ The release was built from the local working tree at Git commit
 commit alone does not reproduce this release; use the staged release directory
 and its manifest. This is a static Viewer and needs no cloud GPU at runtime.
 
-## Local Docker through bakewell.cloud (2026-09-29)
+## Local Docker and bakewell.cloud (updated 2026-09-30)
 
 The Mac runs the local Docker Viewer on `127.0.0.1:18766`. A macOS LaunchAgent
 keeps an SSH reverse tunnel open from the host's loopback port `18767` to that
-local port. Host Nginx now sends `/3dpose/` to the tunnel first. If the Mac,
-Docker, or tunnel is unavailable, it serves the retained host container on
-`18766`. No host port is exposed publicly for the tunnel.
+local port. Host Nginx sends `/3dpose/` to the host container on `18766` first,
+using the tunnel as a backup. Mesh frames are too large to stream through the
+tunnel smoothly: an eight-frame public range took 2.6 seconds through the
+tunnel, compared with 0.32 seconds of video at 25 fps. The Viewer now pauses
+and preserves the last textured mesh while waiting for a missing frame, then
+resumes automatically. No host port is exposed publicly for the tunnel.
 
 The checked-in LaunchAgent source is `com.hehaa.tennis-3dpose-tunnel.plist`.
 It is installed at
 `~/Library/LaunchAgents/com.hehaa.tennis-3dpose-tunnel.plist` and loaded in the
 current user's GUI session. It uses the existing SSH key, checks the connection
 every 20 seconds, and restarts after disconnection. The Mac must be powered on,
-awake, logged in, and running Docker for the live local version to appear.
-After editing assets, rebuild the local Docker image and refresh the public
-page; no asset upload to the host is needed. If the Mac is offline, visitors
-still see the last deployed host release.
+awake, logged in, and running Docker for the local backup to be available.
+After editing assets, rebuild the local Docker image for local testing. To
+update the public page, package and deploy a new host release; local Docker
+changes no longer appear on the public page automatically. If the host
+container is unavailable, the tunnel serves the local version while the Mac
+and Docker are running.
 
 Validation: the tunnel returned both Viewer pages; public HTML, candidate JSON,
 mesh and Wilson byte ranges succeeded after Nginx switched to the tunnel.
@@ -133,3 +138,9 @@ Temporarily unloading the LaunchAgent yielded a public 200 response from the
 host fallback, then the tunnel was loaded again. The host Nginx configuration
 passed `nginx -t`. The prior configuration is saved on the host at
 `/etc/nginx/nginx.conf.bak-3dpose-local-20260929`.
+
+The current host release is
+`/home/ubuntu/tennis-3dpose-releases/20260930-buffered-v2/`, image
+`tennis-3dpose-viewer:release-20260930-buffered-v2`. The previous Nginx
+configuration is saved at `/etc/nginx/nginx.conf.bak-3dpose-direct-20260930`;
+older release directories and image tags remain available for rollback.
