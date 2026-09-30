@@ -22,6 +22,8 @@ class ImportTests(unittest.TestCase):
   status,page=self.request('GET','/import.html');self.assertEqual(status,200);self.assertIn(b'href="/default/viewer.html"',page)
  def test_upload_isolation_range_and_unconfigured_generation(self):
   status,body=self.request('POST','/api/videos?name=clip.mp4',self.video.read_bytes());self.assertEqual(status,201);item=json.loads(body)
+  self.assertEqual((self.library.folder(item['id'])/'original.video').read_bytes(),self.video.read_bytes())
+  status,_=self.request('GET','/datasets/'+item['id']+'/original.video');self.assertEqual(status,404)
   status,part=self.request('GET',item['preview'],headers={'Range':'bytes=0-15'});self.assertEqual(status,206);self.assertEqual(len(part),16)
   status,_=self.request('POST','/api/videos/'+item['id']+'/generate');self.assertEqual(status,400);self.assertEqual(self.library.read(item['id'])['status'],'imported')
   status,_=self.request('POST','/api/videos?name=bad','not a video');self.assertEqual(status,400);self.assertEqual(len(self.library.list()),1)

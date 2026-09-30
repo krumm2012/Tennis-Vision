@@ -87,6 +87,9 @@ class Library:
                     completed=subprocess.run([sys.executable,str(REPO/'viewer/video_import/estimate_mirror.py'),'--dataset',str(folder),'--result',str(work/'result'),'--model',mirror_model,'--device',os.environ.get('VIEWER_RACKET_DEVICE','mps')],stdout=log,stderr=subprocess.STDOUT,timeout=1800)
                 write_record(work/'result/mirror_generation_status.json',{'status':'ready' if completed.returncode==0 else 'needs_review','exit_code':completed.returncode})
             if racket_model:
+                self.update(ident,message='正在检测原分辨率局部拍框')
+                with (run/'racket_roi.log').open('w') as log:
+                    subprocess.run([sys.executable,str(REPO/'viewer/video_import/racket_observations.py'),'--dataset',str(folder),'--result',str(work/'result'),'--model',racket_model,'--device',os.environ.get('VIEWER_RACKET_DEVICE','mps')],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1800)
                 self.update(ident,message='正在修正掌内握拍与拍面角度')
                 with (run/'grip.log').open('w') as log:
                     subprocess.run([sys.executable,str(REPO/'viewer/video_import/fit_dataset_grip.py'),'--dataset',str(folder),'--result',str(work/'result')],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1800)
@@ -97,7 +100,13 @@ class Library:
             write_record(work/'result/run_manifest.json',manifest)
             shutil.copy2(work/'result/quality_report.json',run/'quality_report.json')
             destination = folder/'result'
-            if destination.exists(): shutil.rmtree(destination)
+            if destination.exists():
+                # Preserve the last published result; copy only matching user annotations.
+                marks=destination/'calibration_annotations.json'
+                if marks.exists():
+                    saved=json.loads(marks.read_text());new_meta=json.loads((work/'result/mesh_meta.json').read_text())
+                    if saved.get('video_sha256')==new_meta['video_sha256'] and saved.get('image_size')==new_meta['image_size']:shutil.copy2(marks,work/'result/calibration_annotations.json')
+                destination.replace(run/'previous-result')
             (work/'result').replace(destination)
             self.update(ident, status='ready', message='生成完成', viewer=f'/datasets/{ident}/result/viewer.html')
         except Exception as exc:
@@ -213,13 +222,13 @@ class Handler(SimpleHTTPRequestHandler):
                             chunk=self.rfile.read(min(remaining,1024*1024))
                             if not chunk:raise ValueError('上传中断，请重试')
                             stream.write(chunk);remaining-=len(chunk)
-                    probe=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-show_entries','stream=width,height:format=duration','-of','json',str(folder/'upload')],capture_output=True,text=True,check=True,timeout=30)
+                    probe=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-show_entries','stream=width,height,r_frame_rate:format=duration','-of','json',str(folder/'upload')],capture_output=True,text=True,check=True,timeout=30)
                     info=json.loads(probe.stdout);video=info['streams'][0];duration=float(info['format']['duration'])
                     if not 0<duration<=120:raise ValueError('当前支持最长 120 秒的视频片段')
                     # Normalize browser playback and the inference input to the same timeline.
-                    subprocess.run(['ffmpeg','-v','error','-nostdin','-y','-i',str(folder/'upload'),'-map','0:v:0','-an','-vf',"scale='trunc(min(1280,iw)/2)*2':-2,fps=25",'-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',str(folder/'source.mp4')],capture_output=True,check=True,timeout=180)
-                    (folder/'upload').unlink()
-                    item=self.server.library.update(ident,id=ident,name=name,created=time.time(),duration=duration,status='imported',message='导入完成，可以生成人体',preview=f'/datasets/{ident}/source.mp4')
+                    subprocess.run(['ffmpeg','-v','error','-nostdin','-y','-i',str(folder/'upload'),'-map','0:v:0','-an','-vf',"scale='trunc(min(2560,iw)/2)*2':-2,fps=25",'-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',str(folder/'source.mp4')],capture_output=True,check=True,timeout=180)
+                    (folder/'upload').replace(folder/'original.video')
+                    item=self.server.library.update(ident,id=ident,name=name,created=time.time(),duration=duration,original_image_size=[video['width'],video['height']],original_frame_rate=video.get('r_frame_rate'),analysis_fps=25,status='imported',message='导入完成，可以生成人体',preview=f'/datasets/{ident}/source.mp4')
                     return self.json(item,201)
                 except Exception:
                     shutil.rmtree(folder);raise

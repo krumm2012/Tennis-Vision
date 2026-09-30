@@ -14,12 +14,12 @@ def enrich(folder,model_path,device='mps',hand='right',result=None):
     folder=Path(folder);out=Path(result) if result else folder/'result';meta=json.loads((out/'mesh_meta.json').read_text());attempt=json.loads((folder/'record.json').read_text())['attempt']
     archive=folder/'attempts'/f'{attempt:04d}'/'work/reconstruction.npz'
     with np.load(archive,allow_pickle=False) as d:joints=d['joints'].copy();roots=d['source_roots'].copy();focals=d['focal'].copy()
-    model=json.loads((ROOT/'output/sam3d_cloud/wilson_model.json').read_text())['model'];detector=YOLO(str(model_path));size=meta['image_size'];count=meta['frames'];fps=meta['fps'];wrist_id=41 if hand=='right' else 62
+    model=json.loads((ROOT/'output/sam3d_cloud/wilson_model.json').read_text())['model'];detector=YOLO(str(model_path));size=meta['image_size'];count=meta['frames'];fps=meta['fps'];pixel_scale=size[0]/1280;working_size=(np.asarray(size)/pixel_scale).tolist();wrist_id=41 if hand=='right' else 62
     cap=cv2.VideoCapture(str(folder/'source.mp4'));people=[];rows=[];all_rackets=[];previous=None
     for n in range(count):
         ok,image=cap.read()
         if not ok:raise ValueError('视频帧数与姿态不一致')
-        wrist=joints[n,wrist_id]+roots[n];wuv=project(wrist[None,:],focals[n],size)[0]
+        wrist=joints[n,wrist_id]+roots[n];wuv=project(wrist[None,:],focals[n]/pixel_scale,working_size)[0]
         found=detector.predict(image,classes=[0,38],conf=.015,imgsz=1280,device=device,verbose=False)[0]
         persons=[];candidates=[];rackets=[]
         if found.masks is not None:
@@ -31,14 +31,14 @@ def enrich(folder,model_path,device='mps',hand='right',result=None):
                     persons.append({'box':xyxy.tolist(),'polygon':simplified.round(1).tolist(),'confidence':confidence})
                 elif cls==38:
                     rackets.append({'box':xyxy.tolist(),'polygon':polygon.round(1).tolist(),'confidence':confidence})
-                    distance=float(np.linalg.norm(np.maximum(np.maximum(xyxy[:2]-wuv,wuv-xyxy[2:]),0)))
-                    if distance<75*size[0]/1280 and confidence>=.04:
-                        ellipse=head_ellipse(polygon)
+                    distance=float(np.linalg.norm(np.maximum(np.maximum(xyxy[:2]/pixel_scale-wuv,wuv-xyxy[2:]/pixel_scale),0)))
+                    if distance<75 and confidence>=.04:
+                        ellipse=head_ellipse(polygon/pixel_scale)
                         if ellipse is not None:candidates.append((confidence*np.exp(-distance/30),confidence,ellipse,polygon))
         all_rackets.append({'frame':n,'candidates':rackets});people.append({'frame':n,'persons':persons});row={'frame':n,'status':'missing_observation','review_reasons':['missing_observation']}
         if candidates:
             _,confidence,ellipse,polygon=max(candidates,key=lambda c:c[0])
-            result=fit_shape(ellipse,wrist,wuv,focals[n],model,previous,image_size=size)
+            result=fit_shape(ellipse,wrist,wuv,focals[n]/pixel_scale,model,previous,image_size=working_size)
             _,matrix,t,error,gap,distance=result
             if error<=5 and gap<=.2 and distance<=12 and t[2]>.1:
                 previous=matrix;row.update(status='fitted',quality='silhouette_fitted',ambiguous=True,source='current_video_silhouette',translation_camera_m=t.tolist(),rotation_camera_columns=matrix.tolist(),mask_fit_rms_px=error,detection_confidence=confidence,review_reasons=['mono_plane_ambiguity'],observed_polygon=polygon.round(1).tolist())

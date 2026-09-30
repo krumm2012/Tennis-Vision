@@ -62,9 +62,9 @@ def estimate(folder,model_path,device='mps',reuse=False,result=None):
  for i in range(0,meta['frames'],5):
   camera=vertices[i]+roots[i];ref=camera-2*(camera@n-best.x[2])[:,None]*n;p=ref[:,:2]/ref[:,2:]*focals[i]+size/2;box=np.r_[p.min(0),p.max(0)];real=camera[:,:2]/camera[:,2:]*focals[i]+size/2;realbox=np.r_[real.min(0),real.max(0)]
   overlaps.append(max((iou(box,np.array(c['box'])) for c in evidence['frames'][i]['persons'] if iou(realbox,np.array(c['box']))<.25),default=0))
- report['heldout_box_iou_median']=float(np.median(overlaps));report['heldout_box_fraction_above_04']=float(np.mean(np.array(overlaps)>=.4));report['texture_gate']='heldout_joint_median_and_independent_person_box_overlap; per_pixel_mask_and_depth';report['joint_outliers_present']=report['core_heldout_p90_px']>30
+ report['heldout_box_iou_median']=float(np.median(overlaps));report['heldout_box_fraction_above_04']=float(np.mean(np.array(overlaps)>=.4));report['texture_gate']='heldout_joint_median_and_independent_person_box_overlap; per_pixel_mask_and_depth';report['joint_outliers_present']=report['core_heldout_p90_px']>30*size[0]/1280
  write(out/'mirror_joint_fit_report.json',report)
- if report['core_heldout_median_px']>12 or report['heldout_box_iou_median']<.5 or report['heldout_box_fraction_above_04']<.75 or np.min(y[:,2])<=.1:raise ValueError('镜像关节配准未通过，请查看 mirror_joint_fit_report.json')
+ if report['core_heldout_median_px']>12*size[0]/1280 or report['heldout_box_iou_median']<.5 or report['heldout_box_fraction_above_04']<.75 or np.min(y[:,2])<=.1:raise ValueError('镜像关节配准未通过，请查看 mirror_joint_fit_report.json')
  report=apply_geometry(folder,report,result=out);print(json.dumps(report),flush=True)
 
 if __name__=='__main__':
