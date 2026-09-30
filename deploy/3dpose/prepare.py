@@ -18,7 +18,7 @@ FILES = (
     'temporal_texture_sam2.bin', 'mirror_ground_grid.json',
     'mirror_corner_suggestion.json', 'paired_ground_diagnostic.json',
 )
-PAGE = ('viewer.html', 'mesh_renderer.js', 'texture_audit.js',
+PAGE = ('coaching.js', 'viewer.html', 'mesh_renderer.js', 'texture_audit.js',
         'calibration_editor.js', 'mirror_grid_editor.js', 'racket_editor.js',
         'racket_renderer.js')
 
@@ -76,6 +76,7 @@ def prepare() -> Path:
         elif not origin.is_file() and name in FILES:
             origin = DATA / name
         package(origin, 'joint_fit_v4/full/' + name)
+    package(full / 'coaching_report.json', 'joint_fit_v4/full/coaching_report.json')
     for asset in sorted((SOURCE / 'vendor').iterdir()):
         if asset.is_file():
             package(asset, 'vendor/' + asset.name)

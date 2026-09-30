@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "video_sha256": "06bc8137faef674cbac613038a90187308a05d24c82780d666aa144240ba410c",
+  "status": "review_draft",
+  "provenance": "基于本次对话对原视频与估计 3D 的人工复核草稿；未调用自动分析接口，待教练确认。",
+  "summary": "两次较完整的右手正手挥拍，片尾还有一次未完成的起拍。",
+  "cue": "下一组先只关注：提前屈膝找到来球高度，挥拍经过来球时，让头部高度变化更平顺。",
+  "cue_evidence": "两次前挥时均有明显下沉，随后在触球附近起身。是否影响击球稳定性仍需复练验证。",
+  "limitations": [
+    "阶段边界为近似区间，不是精确触球时间。",
+    "3D 人体、球拍及手部为估计结果，不能据此给出精确发力、拍速或握拍评分。",
+    "下一组只比较这一项变化；没有球路与落点数据时不评价击球效果提升。"
+  ],
+  "shots": [
+    {
+      "id": "1",
+      "label": "第 1 拍 · 正手",
+      "complete": true,
+      "phases": [
+        {
+          "id": "preparation",
+          "label": "准备",
+          "start": 0,
+          "end": 0.25,
+          "observation": "双脚分开、屈膝，球拍在身前；分腿垫步时机尚不能确认。",
+          "confidence": "可见动作，阶段边界为估计",
+          "evidence": "原视频；3D 辅助观察"
+        },
+        {
+          "id": "backswing",
+          "label": "转体引拍",
+          "start": 0.25,
+          "end": 1,
+          "observation": "肩部随身体转动，球拍向持拍侧后方移动，非持拍手展开。",
+          "confidence": "可见动作，阶段边界为估计",
+          "evidence": "原视频；3D 辅助观察"
+        },
+        {
+          "id": "forward_swing",
+          "label": "向前挥拍",
+          "start": 1,
+          "end": 1.4,
+          "observation": "身体降低后向前展开挥拍，注意与接下来起身动作的衔接。",
+          "confidence": "可见动作，阶段边界为估计",
+          "evidence": "原视频；3D 辅助观察"
+        },
+        {
+          "id": "contact",
+          "label": "触球附近",
+          "start": 1.4,
+          "end": 1.52,
+          "observation": "球与拍面在画面中接近；准确触球瞬间及拍面角度未确认。",
+          "confidence": "待复核",
+          "evidence": "原视频；3D 辅助观察"
+        },
+        {
+          "id": "follow_through",
+          "label": "随挥",
+          "start": 1.52,
+          "end": 2.25,
+          "observation": "球拍继续向身体另一侧上方移动，没有在触球附近停止。",
+          "confidence": "可见动作，阶段边界为估计",
+          "evidence": "原视频；3D 辅助观察"
+        },
+        {
+          "id": "recovery",
+          "label": "还原",
+          "start": 2.25,
+          "end": 3.5,
+          "observation": "调整脚步并回到准备姿势；回位是否及时需要结合下一球判断。",
+          "confidence": "可见动作，阶段边界为估计",
+          "evidence": "原视频；3D 辅助观察"
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "label": "第 2 拍 · 正手",
+      "complete": true,
+      "phases": [
+        {
+          "id": "preparation",
+          "label": "准备",
+          "start": 3.5,
+          "end": 4.5,
+          "observation": "双脚分开、屈膝，球拍在身前；分腿垫步时机尚不能确认。",
+          "confidence": "可见动作，阶段边界为估计",
+          "evidence": "原视频；3D 辅助观察"
+        },
+        {
+          "id": "backswing",
+          "label": "转体引拍",
+          "start": 4.5,
+          "end": 5.25,
+          "observation": "肩部随身体转动，球拍向持拍侧后方移动，非持拍手展开。",
+          "confidence": "可见动作，阶段边界为估计",
+          "evidence": "原视频；3D 辅助观察"
+        },
+        {
+          "id": "forward_swing",
+          "label": "向前挥拍",
+          "start": 5.25,
+          "end": 5.68,
+          "observation": "身体降低后向前展开挥拍，注意与接下来起身动作的衔接。",
+          "confidence": "可见动作，阶段边界为估计",
+          "evidence": "原视频；3D 辅助观察"
+        },
+        {
+          "id": "contact",
+          "label": "触球附近",
+          "start": 5.68,
+          "end": 5.8,
+          "observation": "球与拍面在画面中接近；准确触球瞬间及拍面角度未确认。",
+          "confidence": "待复核",
+          "evidence": "原视频；3D 辅助观察"
+        },
+        {
+          "id": "follow_through",
+          "label": "随挥",
+          "start": 5.8,
+          "end": 6.5,
+          "observation": "球拍继续向身体另一侧上方移动，没有在触球附近停止。",
+          "confidence": "可见动作，阶段边界为估计",
+          "evidence": "原视频；3D 辅助观察"
+        },
+        {
+          "id": "recovery",
+          "label": "还原",
+          "start": 6.5,
+          "end": 7.75,
+          "observation": "调整脚步并回到准备姿势；回位是否及时需要结合下一球判断。",
+          "confidence": "可见动作，阶段边界为估计",
+          "evidence": "原视频；3D 辅助观察"
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "label": "第 3 拍 · 未完成",
+      "complete": false,
+      "phases": [
+        {
+          "id": "backswing",
+          "label": "起拍",
+          "start": 9.5,
+          "end": 9.96,
+          "observation": "片段在起拍过程中结束，不评价触球及随挥。",
+          "confidence": "片段不完整",
+          "evidence": "原视频"
+        }
+      ]
+    }
+  ]
+}

@@ -5,7 +5,7 @@ faces [T,3], source_roots [F,3], focal [F] in normalized video pixels,
 masks [F,H,W] uint8 person confidence (0..255). No pickle or legacy-video reuse.
 """
 from pathlib import Path
-import json, math, shutil
+import json, math, shutil, hashlib
 import cv2
 import numpy as np
 
@@ -34,7 +34,7 @@ def package(video, archive, destination):
         with (destination/'temporal_texture_sam2.bin').open('wb') as stream:stream.truncate(count*vertices.shape[1]*6)
         centers=((vertices.min(axis=1)+vertices.max(axis=1))/2).tolist()
         spans=np.max(vertices.max(axis=1)-vertices.min(axis=1),axis=1).tolist()
-        metadata={'frames':count,'vertices':vertices.shape[1],'faces':len(faces),'fps':fps,'image_size':[width,height],'mask_atlas_grid':[cols,rows],'source_roots':roots.tolist(),'focal':focal.tolist(),'display_centers':centers,'display_spans':spans,'mirror_available':False}
+        metadata={'video_sha256':hashlib.sha256(Path(video).read_bytes()).hexdigest(),'frames':count,'vertices':vertices.shape[1],'faces':len(faces),'fps':fps,'image_size':[width,height],'mask_atlas_grid':[cols,rows],'source_roots':roots.tolist(),'focal':focal.tolist(),'display_centers':centers,'display_spans':spans,'mirror_available':False}
         def write(name,value):(destination/name).write_text(json.dumps(value,separators=(',',':')))
         write('mesh_meta.json',metadata);write('person_masks_sam2_stats.json',stats);write('mirror_geometry_frames.json',[{'accepted':False} for _ in range(count)]);write('mirror_geometry.json',{'normal_camera':[0,0,1],'distance_camera_m':0})
         shutil.copy2(video,destination/'video.mp4');shutil.copy2(SOURCE/'video_import/dataset.html',destination/'viewer.html')

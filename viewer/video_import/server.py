@@ -11,8 +11,8 @@ from urllib.parse import urlsplit, parse_qs
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_DATA = REPO / 'output/sam3d_cloud'
-DEFAULT_FILES = {'viewer.html','video.mp4','temporal_pose.json','mesh_meta.json','mesh_local.bin','mesh_smooth.bin','mesh_refined.bin','mesh_temporal.bin','mesh_faces.bin','temporal_texture_sam2.bin','person_masks_sam2.png','person_masks_sam2_stats.json','mirror_geometry.json','mirror_geometry_frames.json','ground_calibration.json','mirror_ground_grid.json','mirror_corner_suggestion.json','paired_ground_diagnostic.json','racket_poses.json','racket_poses_v1.json','racket_poses_v2.json','racket_poses_v3.json','racket_annotations.json','wilson_mesh.bin','wilson_model.json'}
-DEFAULT_SCRIPTS = {'mesh_renderer.js','racket_renderer.js','texture_audit.js','calibration_editor.js','mirror_grid_editor.js','racket_editor.js','vendor/three-0.180.0.min.js'}
+DEFAULT_FILES = {'coaching_report.json','viewer.html','video.mp4','temporal_pose.json','mesh_meta.json','mesh_local.bin','mesh_smooth.bin','mesh_refined.bin','mesh_temporal.bin','mesh_faces.bin','temporal_texture_sam2.bin','person_masks_sam2.png','person_masks_sam2_stats.json','mirror_geometry.json','mirror_geometry_frames.json','ground_calibration.json','mirror_ground_grid.json','mirror_corner_suggestion.json','paired_ground_diagnostic.json','racket_poses.json','racket_poses_v1.json','racket_poses_v2.json','racket_poses_v3.json','racket_annotations.json','wilson_mesh.bin','wilson_model.json'}
+DEFAULT_SCRIPTS = {'coaching.js','mesh_renderer.js','racket_renderer.js','texture_audit.js','calibration_editor.js','mirror_grid_editor.js','racket_editor.js','vendor/three-0.180.0.min.js'}
 MAX_BYTES = 1024 * 1024 * 1024
 ID = re.compile(r'^[0-9a-f]{32}$')
 
@@ -111,7 +111,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif route.startswith('/assets/'):
 
             name = route.removeprefix('/assets/')
-            if name not in ('mesh_renderer.js','vendor/three-0.180.0.min.js'): return self.send_error(404)
+            if name not in ('coaching.js','mesh_renderer.js','vendor/three-0.180.0.min.js'): return self.send_error(404)
             path = REPO/'viewer/sam3d'/name
         else:
             match = re.fullmatch(r'/datasets/([0-9a-f]{32})/(source.mp4|result/[a-zA-Z0-9_.-]+)',route)

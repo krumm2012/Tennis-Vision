@@ -137,3 +137,13 @@ experimental mirror checkbox remains visible. Source-camera depth and mirror
 person masks still gate every projected sample. The mirror calibration is an
 estimate; remaining holes or misalignment are not validated by coverage alone.
 Regression: `node viewer/sam3d/test_candidate_texture.cjs`.
+
+## Evidence-linked coaching
+
+The candidate Viewer includes a reviewed-in-conversation draft (not an automated
+model run), six-phase navigation for two swings and an incomplete final swing.
+Phase buttons seek both video and mesh; selected clips can pause at their end.
+Only one training cue is highlighted, with evidence and uncertainty visible.
+`coaching_report.json` is matched to `mesh_meta.json.video_sha256`; new videos
+without a matching report show an empty analysis state. Future analysis adapters
+must produce their own per-video report. Run `node viewer/sam3d/test_coaching.cjs`.
