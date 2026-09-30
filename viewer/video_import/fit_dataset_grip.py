@@ -50,12 +50,12 @@ def fit_dataset(folder,result=None):
     model=old['model']
     mirror_enabled=bool(meta.get('mirror_available')) and (root/'mirror_geometry.json').exists()
     mirror=read('mirror_geometry.json') if mirror_enabled else {'normal_camera':[0,0,1],'distance_camera_m':0}
-    count=len(frames);ring=np.array(model['head_outline']);grip=np.array([0,model['grip_y_m'],0]);roots=np.array(meta['source_roots']);focals=np.array(meta['focal'])/pixel_scale;palms=[palm_frame(f['raw']) for f in frames];wrists=np.array([a[0] for a in palms])+roots;hands=np.array([a[1] for a in palms]);normal=np.array(mirror['normal_camera']);normal/=np.linalg.norm(normal);plane=mirror['distance_camera_m']
+    count=len(frames);ring=np.array(model['head_outline']);grip=np.array([0,model['grip_y_m'],0]);roots=np.array(meta['source_roots']);focals=np.array(meta['focal'])/pixel_scale;palms=[palm_frame(f['raw']) for f in frames];wrists=np.array([a[0] for a in palms])+roots;hands=np.array([a[1] for a in palms]);normal=np.array(mirror['normal_camera'],dtype=float);normal/=np.linalg.norm(normal);plane=mirror['distance_camera_m']
     model=dict(model,grip_y_m=.045);grip=np.array([0.,.045,0.])
     contacts=[grip_contact(f['raw']) for f in frames]
     offsets=np.array([c[0] for c in contacts]);grip_axes=np.array([hands[i]@c[1] for i,c in enumerate(contacts)])
     raw_axes=grip_axes.copy();grip_axes=smooth_vectors(grip_axes,meta['fps']);grip_axes/=np.maximum(np.linalg.norm(grip_axes,axis=1,keepdims=True),1e-8)
-    anatomical=np.median(offsets,axis=0);real=[];mirror_obs=[];confidence=[];previous_center=None;previous_wrist=None;observation_sources=[]
+    anatomical=np.median(offsets,axis=0);real=[];mirror_obs=[];confidence=[];previous_center=None;previous_wrist=None;observation_sources=[];observation_polygons=[]
     for i in range(count):
         candidate=select_candidate(detections[i]);score=candidate['confidence'] if candidate else 0.;confidence.append(score)
         e=head_ellipse(masks[i]['polygon']) if masks[i]['mask_valid'] else None
@@ -73,11 +73,11 @@ def fit_dataset(folder,result=None):
             prediction=previous_center+(wrist_uv-previous_wrist) if previous_center is not None else h[0]
             score=c['confidence']*np.exp(-distance/70)*np.exp(-np.linalg.norm(h[0]-prediction)/100)
             options.append((score,c,h))
-        source='normalized_full_frame'
+        source='normalized_full_frame';selected_polygon=candidate['polygon'] if candidate else None
         if options:
             _,candidate,e=max(options,key=lambda q:q[0]);confidence[-1]=candidate['confidence'];source=candidate.get('source','normalized_full_frame')
-            previous_center=e[0];previous_wrist=wrist_uv
-        observation_sources.append(source if e is not None else None)
+            previous_center=e[0];previous_wrist=wrist_uv;selected_polygon=candidate['polygon']
+        observation_sources.append(source if e is not None else None);observation_polygons.append(selected_polygon if e is not None else None)
         real.append(e)
         reflected=wrists[i]-2*(wrists[i]@normal-plane)*normal;uv=project(reflected[None,:],focals[i],size)[0];options=[]
         for c in detections[i]['candidates']:
@@ -172,8 +172,8 @@ def fit_dataset(folder,result=None):
             row.update(status='missing_observation',quality='hidden')
         elif not accepted[i]:
             row['quality']='constrained_estimate'
-        if old['frames'][i].get('observed_polygon'):
-            row['observed_polygon']=old['frames'][i]['observed_polygon']
+        if observation_polygons[i] is not None:
+            row['observed_polygon']=observation_polygons[i]
         row['face_angle_to_camera_deg']=float(np.degrees(np.arccos(np.clip(abs(rs[i,2,2]),0,1))))
     out={**old,'model':model,'method':'wilson_anatomical_grip_so3_v4','grasp_calibration':calibration,'frames':rows,'summary':{'frames':count,'observed':sum(r['status']=='fitted' and r['quality']=='silhouette_fitted' for r in rows),'hidden':sum(r['status']!='fitted' for r in rows),'hand':old['summary'].get('hand','right'),'interpolated':sum(r['status']=='fitted' and r['quality']=='constrained_estimate' for r in rows),'constrained_estimate':sum(r['status']=='fitted' and r['quality']=='constrained_estimate' for r in rows),'mirror_observations':sum(e is not None for e in mirror_obs),'mono_plane_ambiguity':True,'model_dimensions_measured':False}}
     out['summary'].update(motion_metrics(rs));out['stability']={'before':before_stability,'after':motion_metrics(rs),'method':'SO3 angular acceleration, confidence weighted; robust hand axes; .6s bracketed gap support','fps':meta['fps']}

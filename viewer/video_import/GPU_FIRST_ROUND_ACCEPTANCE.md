@@ -84,3 +84,31 @@ python3 -B viewer/video_import/fit_dataset_grip.py \
 ```
 
 本地 Docker 实测：`tennis-3dpose-local` 为 healthy，127.0.0.1:18769 入口正常；新视频连续播放到 249/249 帧，125/249 帧背面镜中取色覆盖 93.1%（仅该帧该视角）。前后视角验收图 `output/docker-grip-4843-front.png` / `output/docker-grip-4843-back.png`。默认视频入口、同源 API、视频 Range 206、发布资源 SHA-256 均通过；原始 NPZ 与尝试日志路径返回 404。旧 18766 容器未改动。
+
+## 2560×1440 / 25 fps 与拍面抖动修复（2026-10-01）
+
+用户反馈原版本仍明显抖动、部分帧缺拍。复现脚本对旧输出返回 FAIL：最大相邻旋转 64.35°，角加速度 P95 24.35°，隐藏 18 帧（0-based 80–89、178–185）。原文件编码信息为 2560×1440 / 50 fps；处理规格按用户要求改成 2560×1440 / 25 fps，未放大成 4K。
+
+根因：单帧轮廓的拍面歧义、异常掌部方向（原掌坐标系最大跳变约 140°）覆盖拍框证据、旧 wrist 拟合的短缺拍上限，以及浏览器相邻源根坐标插值引入额外位移。增加原分辨率真人/镜中手部 ROI 检测，降低异常掌轴权重，限制掌内偏移滤波 ≤15 mm，在 SO(3) 上按证据权重约束角加速度，≤0.6 秒且两端有证据的缺拍可约束估计。显示插值先消除源根坐标，再插值掌点/四元数；避免源根坐标帧跳造成球拍额外位移。
+
+云 SSH 初次关闭，attempt 2 暂用分辨率转移，记录明确标为未重新 SAM 推理。用户恢复 SSH 后，attempt 3 已在 RTX 4090 真实重新推理 249 帧，209.62 秒；最终发布的是 attempt 3。
+
+- Remote job：`a4cb217fefe14ff4b222f7c2d6bbef73`。
+- 2560×1440 / 25 fps 输入 SHA-256：`725446711d7486ade7dbf05526a9fcac593c9e97e0db4347a551ece19a39e82f`。
+- 真正云输出 NPZ SHA-256：`e9cf454fc1ed4f06226b87ce1df4d801d443b4f4a65ef68d36b4240030a0a5bb`。
+- 整幅初始拍框拟合 190 帧；原分辨率 ROI 有真人候选 222 帧。最终稳定序列 59 帧通过 <5 px（1280 宽规范单位）的拍框残差，190 帧为约束估计，0 帧隐藏；28 帧镜中拍框用于约束。稳定指标不等于三维角度准确率。
+- 相邻旋转最大 64.35°→27.47°，P95 30.46°→20.03°；角加速度 P95 24.35°→5.11°、最大 69.80°→8.15°。
+- 新镜面核心关节留出中位误差 15.15 px（在 2560 宽），留出投影框 IoU 中位数 0.847，249 帧镜中遮罩。原场地/镜面用户标记保持同一视频身份和像素坐标。
+- 本地后处理初次遇到 NumPy bool JSON 序列化和整数法线归一化错误；原错误日志保留，从已有云 NPZ 恢复镜面/ROI/握拍，无重复 GPU 推理。
+- 15 个 Python 测试通过。`node viewer/video_import/test_racket_layer.cjs` 验证根坐标变化不影响插值握点以及暂停精确帧；对旧 JS 返回失败、新 JS 通过。旧真实输出 audit FAIL、新输出 PASS。旋转脉冲测试同时验证抑制异常拍面且保留 >85° 的真实挥拍变化。
+- 代码中的图谱重建命令已执行，因缺少 graphify 模块未重建。数据证据、恢复日志和新旧结果保留在 attempts/0003 及 result 的清单中。
+
+复算命令：
+
+```bash
+python3 -B viewer/video_import/racket_observations.py --dataset output/video_library/<id> --model /path/to/yolo26s-seg.pt
+python3 -B viewer/video_import/fit_dataset_grip.py --dataset output/video_library/<id>
+python3 -B viewer/video_import/audit_racket_motion.py output/video_library/<id>/result/racket_poses.json --check
+```
+
+最终本地 Docker 验收：播放至 249/249 帧；84/249 与 185/249 帧（两段原缺拍区间）球拍可见。185 帧背面镜中覆盖 84.7%（仅该帧该视角，不是全片平均）。截图 `output/native-1440-racket-gap-84.png`、`output/native-1440-racket-gap-185-back.png`。处理状态为“2560×1440 · 25 fps · SAM3D 网格”，不再使用分辨率转移人体。Docker healthy，发布资源哈希、视频 Range 206 与同源 API 通过。旧 18766 容器未改动。

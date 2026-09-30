@@ -6,7 +6,7 @@
 
 ```text
 import.html 上传
- → 本地 server.py：H.264 / 25 fps / 最大宽度 1280
+ → 本地 server.py：H.264 / 25 fps / 最大宽度 2560
  → cloud_adapter.py：视频 SHA-256、SSH 上传、提交任务
  → GPU worker.py：记录任务、启动独立进程
  → generate_sam.py：人物分割与跟踪 → SAM 3D Body → 网格/相机/关节/遮罩

@@ -26,7 +26,7 @@ def detect(folder,model_path,device='mps',result=None):
         original_size=np.array([image.shape[1],image.shape[0]]);scale=original_size/size
         wrist=joints[n,41]+roots[n];centers=[('real',wrist)]
         if mirror:
-            normal=np.array(mirror['normal_camera']);normal/=np.linalg.norm(normal);plane=mirror['distance_camera_m'];centers.append(('mirror',wrist-2*(wrist@normal-plane)*normal))
+            normal=np.array(mirror['normal_camera'],dtype=float);normal/=np.linalg.norm(normal);plane=mirror['distance_camera_m'];centers.append(('mirror',wrist-2*(wrist@normal-plane)*normal))
         candidates=[]
         for view,point in centers:
             uv=project(point[None,:],focal[n],size)[0];radius=np.clip(focal[n]/max(point[2],.1)*.95,100*size[0]/1280,230*size[0]/1280)
