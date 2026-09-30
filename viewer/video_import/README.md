@@ -71,3 +71,42 @@ Tests use generated color videos and synthetic geometry, not model inference.
 ## Existing cloud GPU
 
 Use `deploy/3dpose/cloud_gpu/deploy.sh` to provision the worker scripts into an existing GPU Python environment, then `start_local.py` to connect the local library. See the linked Chinese runbook for configuration, real-video smoke commands, records and limitations.
+
+## Mirror markers and Wilson racket (new videos)
+
+The dataset Viewer now has a collapsible **镜面与球拍** panel. Use the same physical corner convention as the default Viewer: ground A/B/C/D, then mirror A′/B′/C′/D′, with A↔A′ etc. Markers support undo, keyboard nudging, perspective grids and JSON import/export. They are saved to `result/calibration_annotations.json`, checked against the video's SHA-256 and image size. Saving changed markers disables the old mirror fit until explicitly recalculated.
+
+Enter measured AB/AD lengths. The 3.3/4.8 values are editable starting values, not measurements of each new video. **拟合镜面** fits the paired corners using the current video focal estimate, checks residuals and positive depths, matches reflected-body projections against current-video person masks, and writes mirror plane/masks. The fit is an estimate; matching corners alone cannot validate body scale or true camera calibration. The new camera clip now also has an automatic joint-based mirror estimate, following the default Viewer's SAM-camera registration approach; paired corner markers remain available for manual review.
+
+Wilson mesh geometry is reused from the default asset; its old motion is never reused. Current-video racket silhouettes are associated with the selected SAM wrist and fitted to a rigid racket. Only bounded gaps up to 0.24 s are interpolated; unsupported frames hide the racket. The planar orientation and real grip/size remain ambiguous. This iteration does not deform fingers to grip the racket and does not implement the default video's full joint palm optimization.
+
+```sh
+python3 deploy/3dpose/cloud_gpu/start_local.py \
+  --config deploy/3dpose/cloud_gpu/host.local.json \
+  --racket-model /absolute/path/yolo26s-seg.pt \
+  --mirror-pose-model /absolute/path/yolo26m-pose.pt
+
+# Enrich an existing ready dataset; the NPZ must include SAM joints.
+python3 viewer/video_import/enrich_result.py \
+  --dataset output/video_library/DATASET_ID \
+  --model /absolute/path/yolo26s-seg.pt --device mps --hand right
+```
+
+Current Mac postprocessing uses MPS locally after cloud body inference; `VIEWER_RACKET_DEVICE=cpu` or `cuda` selects another provisioned device. Prerequisites: Ultralytics, PyTorch, OpenCV, SciPy, local segmentation weights and the existing `output/sam3d_cloud/wilson_mesh.bin` / `wilson_model.json` assets. The optional postprocessing is enabled by `--racket-model` / `VIEWER_RACKET_MODEL`; failures preserve logs and fail the combined job for retry. Without it, body generation remains available and the panel reports missing racket observations.
+
+Extra outputs: `racket_poses.json`, `wilson_mesh.bin`, `wilson_model.json`, `person_candidates.json`, `enrichment_manifest.json`. After manual mirror fitting: `paired_ground_calibration.json`, `ground_calibration.json`, `mirror_ground_grid.json`, `mirror_calibration_report.json`, updated mirror geometry/masks. These belong to each dataset, not the default-video folder.
+
+### Automatic mirror registration
+
+`estimate_mirror.py` detects the reflected person's COCO joints, swaps anatomical left/right correspondences, fits a single mirror plane in the current SAM camera frame, and excludes every fifth frame from fitting. Shoulders/hips/knees/ankles determine the plane; arm joints remain in the error report. Texture acceptance uses held-out joint median and independently detected reflected-body box overlap, then the renderer applies mask/depth checks per pixel. Large individual joint errors remain reported; they do not blank a whole frame's texture.
+
+```sh
+python3 viewer/video_import/estimate_mirror.py \
+  --dataset output/video_library/DATASET_ID \
+  --model /absolute/path/yolo26m-pose.pt --device mps
+# Add --reuse-observations for a matching existing mirror_pose.json cache.
+```
+
+Without adequate evidence, the automatic stage records needs_review and publishes the available body/racket; manual paired calibration remains available. It never supplies default-video mirror poses to another video. Outputs: mirror_pose.json, mirror_joint_fit_report.json, mirror_calibration_report.json and updated mirror plane/masks. The plane and model scale remain monocular estimates, not measured camera geometry.
+
+The local Docker release is documented in ../../deploy/3dpose/README.md and uses port 18769. Its UI and assets are in the image; videos are mounted read-only and the Mac service on 18768 performs writes and MPS/GPU job dispatch.

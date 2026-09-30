@@ -48,6 +48,16 @@ class ImportTests(unittest.TestCase):
   self.assertEqual(state['status'],'ready',state)
   folder=self.library.folder(item['id']);manifest=json.loads((folder/'attempts/0001/run_manifest.json').read_text());self.assertEqual(manifest['status'],'ready');self.assertEqual(manifest['source_sha256'],json.loads((folder/'result/mesh_meta.json').read_text())['video_sha256'])
   status,page=self.request('GET',state['viewer']);self.assertEqual(status,200);self.assertIn(b'SamMeshRenderer',page)
+ def test_annotations_are_video_scoped_and_invalid_points_do_not_overwrite(self):
+  status,body=self.request('POST','/api/videos?name=markers.mp4',self.video.read_bytes());item=json.loads(body);folder=self.library.folder(item['id']);out=folder/'result';out.mkdir()
+  meta={'video_sha256':'this-video','image_size':[64,48],'frames':3,'mirror_available':True};(out/'mesh_meta.json').write_text(json.dumps(meta));self.library.update(item['id'],status='ready')
+  value={'video_sha256':'other','image_size':[64,48],'ground':{'points':[[1,1],[63,1],[63,47],[1,47]],'frame':0},'mirror':{'points':[]}}
+  endpoint='/api/videos/'+item['id']+'/annotations'
+  status,_=self.request('POST',endpoint,json.dumps(value));self.assertEqual(status,400)
+  value['video_sha256']='this-video';status,_=self.request('POST',endpoint,json.dumps(value));self.assertEqual(status,200)
+  self.assertFalse(json.loads((out/'mesh_meta.json').read_text())['mirror_available'])
+  value['ground']['points']=[[0,0],[63,47],[63,0],[0,47]];status,_=self.request('POST',endpoint,json.dumps(value));self.assertEqual(status,400)
+  self.assertEqual(json.loads((out/'calibration_annotations.json').read_text())['ground']['points'][0],[1,1])
  def test_generation_failure_and_restart_recovery(self):
   status,body=self.request('POST','/api/videos?name=clip.mp4',self.video.read_bytes());item=json.loads(body)
   self.library.command=['/usr/bin/false'];self.library.generate(item['id'])

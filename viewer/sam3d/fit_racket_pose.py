@@ -32,12 +32,12 @@ def model_points(model):
     ], np.float64)
 
 
-def project(points, focal):
+def project(points, focal, image_size=(1280,720)):
     depth = points[:, 2]
     if np.any(depth <= 0):
         return np.full((len(points), 2), 1e5)
-    return np.column_stack((640 + focal * points[:, 0] / depth,
-                            360 + focal * points[:, 1] / depth))
+    return np.column_stack((image_size[0]/2 + focal * points[:, 0] / depth,
+                            image_size[1]/2 + focal * points[:, 1] / depth))
 
 
 def transform(object_points, params):

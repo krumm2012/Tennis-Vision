@@ -152,3 +152,28 @@ license are packaged at both routes; no external CDN is required. Both local
 coverage on every frame, including mirror and temporal texture paths. Camera
 regression checks cover 96 view/point combinations. The previous
 `20260930-buffered-v2` release remains the rollback target.
+
+## Independent local Docker for imported videos
+
+Use a separate `tennis-3dpose-local` container on **127.0.0.1:18769**. This does not replace the 18766 container used by the public tunnel. The image contains the video-library UI and current renderer/tool scripts; a read-only mount serves ready datasets. Only source video and files under result/ are exposed, not attempt logs or NPZ working directories. The companion Mac API remains on 18768 for marker writes, MPS postprocessing and private cloud-GPU dispatch.
+
+```sh
+# First start the Mac companion service (in its own terminal).
+python3 deploy/3dpose/cloud_gpu/start_local.py \
+  --config deploy/3dpose/cloud_gpu/host.local.json \
+  --racket-model /absolute/path/yolo26s-seg.pt \
+  --mirror-pose-model /absolute/path/yolo26m-pose.pt
+
+python3 deploy/3dpose/prepare_local.py
+VIEWER_BASE_IMAGE=nginx:stable-alpine docker compose \
+  -p tennis-3dpose-local -f output/3dpose_local/compose.yaml \
+  --env-file output/3dpose_local/.env up -d --build
+```
+
+Entry: http://127.0.0.1:18769/import.html
+Current clip: http://127.0.0.1:18769/datasets/85ade7a072984579831f5cb76e8e5fd3/result/viewer.html
+Default comparison: http://127.0.0.1:18769/default/viewer.html
+
+`prepare_local.py` records UI hashes and the Git revision in release_manifest.json, and resolves the video-library mount into an ignored .env file. Rebuild after UI code changes; mounted generated data and marker changes are visible without rebuilding. Docker Desktop must resolve host.docker.internal to the Mac service. Nginx forwards a fixed loopback Host, while the API checks Origin including the local Docker port. No SSH keys or model weights are built into the image.
+
+Verification: nginx -t, /healthz, video-library API with Origin 18769, byte Range for video/mesh, body/racket playback and mirror on/off comparison. Current cached base image digest: nginx@sha256:985220252f3863977e468f611ef118ebd01421289dd86ee1ae99cb068c3bce2b. Public deployment config and tunnel are separate.

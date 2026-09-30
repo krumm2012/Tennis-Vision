@@ -1,0 +1,21 @@
+services:
+  viewer:
+    build:
+      context: .
+      args:
+        VIEWER_BASE_IMAGE: ${VIEWER_BASE_IMAGE:-nginx:1.27-alpine}
+        CODE_REVISION: ${CODE_REVISION:-unknown}
+    image: tennis-3dpose-local:${CODE_REVISION:-latest}
+    container_name: tennis-3dpose-local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18769:80"
+    volumes:
+      - type: bind
+        source: ${VIDEO_LIBRARY_PATH:?run prepare_local.py first}
+        target: /data
+        read_only: true
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run

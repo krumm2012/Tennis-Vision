@@ -77,7 +77,7 @@ NPZ 禁止 pickle，`F` 等于标准化视频解码帧数，`V/T` 为模型顶�
 
 贴图通过 `vertices + source_roots` 和每帧焦距投影到当前视频画面，再结合人物遮罩与可见性筛选取色。不是逐帧人工修补。遮罩 PNG 的浏览器 R 通道有效（OpenCV 编码前 BGR 索引 2）。原始网格用于源投影，稳定网格用于显示，避免平滑直接改变取色坐标。
 
-发布产物包括 `video.mp4`、原始/稳定网格 BIN、faces BIN、mesh metadata、遮罩图集和统计、`quality_report.json`、`run_manifest.json`、`viewer.html`。`mesh_smooth.bin` 是实际轻量稳定结果；refined/temporal 暂为原始网格副本，不声称实现高级时序重建。新视频时间纹理融合与镜面数据关闭，未拍摄到的表面保留灰色。球拍、球和实测场地未生成。
+发布产物包括 `video.mp4`、原始/稳定网格 BIN、faces BIN、mesh metadata、遮罩图集和统计、`quality_report.json`、`run_manifest.json`、`viewer.html`。`mesh_smooth.bin` 是实际轻量稳定结果；refined/temporal 暂为原始网格副本，不声称实现高级时序重建。新视频时间纹理融合关闭，未拍摄到的表面保留灰色。后续已接入可选 Wilson 球拍后处理及配对镜面标记/拟合；镜面需完成各视频角点确认。球和实测三维场地仍未生成。
 
 ## 5. 任务记录及故障复查
 
@@ -115,4 +115,4 @@ output/video_library/<dataset_id>/
 python3 -B -m unittest discover -s viewer/video_import -p 'test_*.py' -v
 ```
 
-下一阶段优先：人工选择跟踪主体、切镜/遮挡处理、贴图覆盖诊断与可靠缓存，再加入球拍/球/场地和击球分段。教学指导需要证据时间段、数据质量及人工复核入口；当前新视频不会套用默认视频教学报告。
+下一阶段优先：人工选择跟踪主体、切镜/遮挡处理、贴图覆盖诊断与可靠缓存，复核球拍握持/拍面，再加入球/场地和击球分段。教学指导需要证据时间段、数据质量及人工复核入口；当前新视频不会套用默认视频教学报告。

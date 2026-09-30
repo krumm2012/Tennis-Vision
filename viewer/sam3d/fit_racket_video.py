@@ -82,7 +82,7 @@ def continuous_plane(matrix, previous):
     return min(alternatives,key=lambda r:Rotation.from_matrix(previous.T@r).magnitude())
 
 
-def fit_shape(ellipse, wrist_camera, wrist_uv, focal, model, previous=None):
+def fit_shape(ellipse, wrist_camera, wrist_uv, focal, model, previous=None, image_size=(1280,720)):
     center, radii, angle = ellipse
     uv_axes = np.array([[np.cos(angle),-np.sin(angle)], [np.sin(angle),np.cos(angle)]])
     ring = ring_points(model)
@@ -92,10 +92,10 @@ def fit_shape(ellipse, wrist_camera, wrist_uv, focal, model, previous=None):
     def values(params):
         matrix = Rotation.from_rotvec(params[:3]).as_matrix()
         translation = params[3:]
-        uv = project(ring@matrix.T+translation, focal)
+        uv = project(ring@matrix.T+translation, focal, image_size)
         normalized = ((uv-center)@uv_axes)/radii
         contour_error = (np.linalg.norm(normalized,axis=1)-1)*np.sqrt(np.prod(radii))
-        projected_center = project((matrix@local_center+translation)[None,:],focal)[0]
+        projected_center = project((matrix@local_center+translation)[None,:],focal,image_size)[0]
         wrist_error = matrix@grip+translation-wrist_camera
         return matrix, translation, contour_error, projected_center-center, wrist_error
 

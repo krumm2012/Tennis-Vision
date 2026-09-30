@@ -75,6 +75,17 @@ class Library:
             self.update(ident, message='正在校验并打包三维结果')
             from package_result import package
             package(folder/'source.mp4', work/'reconstruction.npz', work/'result')
+            racket_model=os.environ.get('VIEWER_RACKET_MODEL')
+            if racket_model:
+                self.update(ident,message='正在检测并拟合球拍')
+                with (run/'enrichment.log').open('w') as log:
+                    subprocess.run([sys.executable,str(REPO/'viewer/video_import/enrich_result.py'),'--dataset',str(folder),'--result',str(work/'result'),'--model',racket_model,'--device',os.environ.get('VIEWER_RACKET_DEVICE','mps')],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1800)
+            mirror_model=os.environ.get('VIEWER_MIRROR_MODEL')
+            if mirror_model and racket_model:
+                self.update(ident,message='正在配准镜中人体')
+                with (run/'mirror.log').open('w') as log:
+                    completed=subprocess.run([sys.executable,str(REPO/'viewer/video_import/estimate_mirror.py'),'--dataset',str(folder),'--result',str(work/'result'),'--model',mirror_model,'--device',os.environ.get('VIEWER_RACKET_DEVICE','mps')],stdout=log,stderr=subprocess.STDOUT,timeout=1800)
+                write_record(work/'result/mirror_generation_status.json',{'status':'ready' if completed.returncode==0 else 'needs_review','exit_code':completed.returncode})
             remote=work/'remote_manifest.json'
             if remote.exists():manifest['remote']=json.loads(remote.read_text())
             manifest.update(status='ready',finished_at=now(),artifact_sha256={'reconstruction.npz':sha256(work/'reconstruction.npz')})
@@ -133,8 +144,9 @@ class Handler(SimpleHTTPRequestHandler):
         elif route.startswith('/assets/'):
 
             name = route.removeprefix('/assets/')
-            if name not in ('coaching.js','mesh_renderer.js','vendor/three-0.180.0.min.js'): return self.send_error(404)
-            path = REPO/'viewer/sam3d'/name
+            if name in ('dataset_tools.js','dataset_racket.js'):path=REPO/'viewer/video_import'/name
+            elif name in ('coaching.js','mesh_renderer.js','vendor/three-0.180.0.min.js'):path=REPO/'viewer/sam3d'/name
+            else:return self.send_error(404)
         else:
             match = re.fullmatch(r'/datasets/([0-9a-f]{32})/(source.mp4|result/[a-zA-Z0-9_.-]+)',route)
             if not match: return self.send_error(404)
@@ -164,6 +176,25 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.allowed(): return self.json({'error':'仅允许本地访问'},403)
         route=urlsplit(self.path)
         try:
+            edit=re.fullmatch(r'/api/videos/([0-9a-f]{32})/(annotations|calibration)',route.path)
+            if edit:
+                ident,action=edit.groups();folder=self.server.library.folder(ident)
+                if self.server.library.read(ident)['status']!='ready':raise ValueError('请先完成视频生成')
+                size=int(self.headers.get('Content-Length','0'))
+                if not 0<size<=65536:raise ValueError('标记 JSON 大小无效')
+                value=json.loads(self.rfile.read(size));meta=json.loads((folder/'result/mesh_meta.json').read_text())
+                if value.get('video_sha256')!=meta['video_sha256'] or value.get('image_size')!=meta['image_size']:raise ValueError('标记属于其他视频')
+                from mirror_calibration import corners,apply
+                if action=='calibration':return self.json(apply(folder,value))
+                for part in ('ground','mirror'):
+                    row=value.get(part,{})
+                    if row.get('points'):
+                        corners(row,meta['image_size'])
+                        if type(row.get('frame')) is not int or not 0<=row['frame']<meta['frames']:raise ValueError('标记帧号无效')
+                write_record(folder/'result/calibration_annotations.json',value)
+                meta['mirror_available']=False
+                write_record(folder/'result/mesh_meta.json',meta)
+                return self.json({'saved':True})
             if route.path == '/api/videos':
                 size=int(self.headers.get('Content-Length','0'))
                 if not 0<size<=MAX_BYTES: return self.json({'error':'请选择不超过 1 GB 的视频'},413)
@@ -191,7 +222,7 @@ class Handler(SimpleHTTPRequestHandler):
             match=re.fullmatch(r'/api/videos/([0-9a-f]{32})/generate',route.path)
             if match:return self.json(self.server.library.generate(match[1]),202)
             return self.json({'error':'未知请求'},404)
-        except (ValueError,FileNotFoundError,KeyError,IndexError,subprocess.SubprocessError, OSError) as exc:
+        except (ValueError,TypeError,FileNotFoundError,KeyError,IndexError,subprocess.SubprocessError, OSError) as exc:
             return self.json({'error':str(exc)[:250]},400)
 
 
@@ -203,7 +234,7 @@ def main():
         if not requirements(): command=[sys.executable,str(Path(__file__).with_name('generate_sam.py'))]
     if not isinstance(command,list) or any(not isinstance(x,str) for x in command):raise ValueError('VIEWER_GENERATOR_COMMAND must be a JSON argument array')
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
-    server.library=Library(args.root,command);server.origins={f'http://{host}:{port}' for host in ('localhost','127.0.0.1') for port in (18766,args.port)}
+    server.library=Library(args.root,command);server.origins={f'http://{host}:{port}' for host in ('localhost','127.0.0.1') for port in (18766,18769,args.port)}
     print(f'Video library: http://127.0.0.1:{args.port}',flush=True);server.serve_forever()
 
 if __name__=='__main__':main()
