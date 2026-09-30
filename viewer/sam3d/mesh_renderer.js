@@ -20,6 +20,16 @@ class SamMeshRenderer {
   this.scene.add(this.guides,this.jointDots);
  }
  addLayer(layer){this.layers.push(layer);}
+ setGround(width,length,visible=true){
+  if(!visible||!Number.isFinite(width)||!Number.isFinite(length)||width<=0||length<=0){if(this.ground)this.ground.visible=false;return;}
+  if(!this.ground){
+   // Keep the floor out of source-camera depth and texture coverage passes.
+   this.ground=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({color:0x164b50,side:THREE.DoubleSide}));
+   this.ground.rotation.x=-Math.PI/2;this.scene.add(this.ground);
+  }
+  this.ground.visible=true;this.ground.scale.set(width,length,1);
+  this.ground.position.set(width/2,-.015,length/2);
+ }
  async frameMesh(file,n){const key=file+':'+n;if(this.meshFrames.has(key)){const value=this.meshFrames.get(key);this.meshFrames.delete(key);this.meshFrames.set(key,value);return value}const count=this.meta.vertices*3;if(this.meshWhole.has(file))return this.meshWhole.get(file).subarray(n*count,(n+1)*count);if(this.meshPending.has(key))return this.meshPending.get(key);const begin=n*count*4,end=begin+count*4-1,controller=new AbortController();this.meshAbort.set(key,controller);const request=fetch(file,{headers:{Range:`bytes=${begin}-${end}`},signal:controller.signal}).then(async r=>{if(!r.ok)throw Error(file+' 下载失败（HTTP '+r.status+'）');const bytes=await r.arrayBuffer();let value;if(r.status===206){if(bytes.byteLength!==count*4)throw Error(file+' 帧数据长度错误');value=new Float32Array(bytes)}else if(r.status===200&&bytes.byteLength% (count*4)===0){const all=new Float32Array(bytes);this.meshWhole.set(file,all);value=all.subarray(n*count,(n+1)*count)}else throw Error(file+' 无法读取网格帧（HTTP '+r.status+'）');this.meshFrames.set(key,value);while(this.meshFrames.size>40)this.meshFrames.delete(this.meshFrames.keys().next().value);this.onFrameReady?.(n);return value}).catch(e=>{if(e.name!=='AbortError')this.onError?.(e,n);throw e}).finally(()=>{this.meshPending.delete(key);this.meshAbort.delete(key)});this.meshPending.set(key,request);return request}
  prefetch(n,files){if(!this.meshAbort)this.meshAbort=new Map();for(const [key,controller] of this.meshAbort){const frame=Number(key.slice(key.lastIndexOf(':')+1));if(frame<n-2||frame>n+12)controller.abort()}const end=Math.min(this.meta.frames-1,n+8);for(const file of new Set(files))for(let frame=n;frame<=end;frame++)this.frameMesh(file,frame).catch(()=>{});}
  async load(){const checked=async url=>{const r=await fetch(url);if(!r.ok)throw Error(url+' 加载失败（HTTP '+r.status+'）');return r;};this.temporalTexture=new Uint8Array(await checked('temporal_texture_sam2.bin').then(r=>r.arrayBuffer()));this.meta=await checked('mesh_meta.json').then(r=>r.json());this.mirror=await checked('mirror_geometry_frames.json').then(r=>r.json());this.geometry=await checked('mirror_geometry.json').then(r=>r.json());this.maskImage=new Image();this.maskImage.src='person_masks_sam2.png';await this.maskImage.decode();this.maskStats=await checked('person_masks_sam2_stats.json').then(r=>{if(!r.ok)throw Error('遮罩统计加载失败');return r.json()});this.faces=new Uint32Array(await checked('mesh_faces.bin').then(r=>{if(!r.ok)throw Error('网格三角面下载失败');return r.arrayBuffer()}));
@@ -182,6 +192,7 @@ class SamMeshRenderer {
   for(const layer of this.layers)layer.dispose?.();
   for(const resource of [this.geometryBuffer,this.material,this.texture,this.maskTexture,this.sourceTarget,this.mirrorTarget,this.statsTarget])resource?.dispose();
   for(const object of [...this.guideLines.values(),this.jointDots]){object.geometry.dispose();object.material.dispose();}
+  this.ground?.geometry.dispose();this.ground?.material.dispose();
   this.renderer.dispose();this.ready=false;
  }
 }

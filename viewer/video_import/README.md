@@ -1,5 +1,8 @@
 # Local video import and generation
 
+Cloud GPU deployment components, execution contracts, generated-data inventory,
+and per-run records are tracked in [CLOUD_GPU_PLAN.md](CLOUD_GPU_PLAN.md).
+
 Default Viewer via local library: http://127.0.0.1:18768/default/viewer.html
 
 The library serves the existing default dataset directly (including HTTP Range),

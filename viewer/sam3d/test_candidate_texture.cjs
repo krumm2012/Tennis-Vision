@@ -2,7 +2,9 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const source=fs.readFileSync(__dirname+'/joint_fit/build_full_viewer.py','utf8');
 const script=source.match(/<script>(window\.TENNIS_JOINT_CANDIDATE=true;.*?)<\/script>/s)[1];
 const controls=new Map();const $=id=>{if(!controls.has(id)){const label={hidden:false};controls.set(id,{checked:true,disabled:false,closest:()=>label})}return controls.get(id)};
-vm.runInNewContext(script,{window:{},$});
+vm.runInNewContext(script,{window:{},$,document:{querySelector:()=>({insertBefore(){}})}});
+assert.equal($('poseMode').value,'smooth');
+assert.equal($('poseMode').disabled,false);
 assert.equal($('mirrorTexture').checked,true,'candidate back view must retain its available mirror texture source');
 assert.equal($('mirrorTexture').disabled,false,'mirror texture must remain user controllable');
 assert.equal($('mirrorTexture').closest('label').hidden,false,'mirror texture control must be visible');
