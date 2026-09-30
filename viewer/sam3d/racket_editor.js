@@ -76,8 +76,8 @@ function draw(){
   $('racketPart').value=selected;
 }
 function open(){
-  if(!data||v.readyState<2){status('等待视频和姿态数据加载后再标注');return}
-  v.pause();editFrame=n;const saved=frames.get(n);draft={points:structuredClone(saved?.points||{}),mirror_points:structuredClone(saved?.mirror_points||{})};selected=PARTS[0][0];view='points';
+  if(!data||v.readyState<2||v.seeking){status('等待视频和姿态数据加载后再标注');return}
+  pausePlayback();editFrame=n;const saved=frames.get(n);draft={points:structuredClone(saved?.points||{}),mirror_points:structuredClone(saved?.mirror_points||{})};selected=PARTS[0][0];view='points';
   still.getContext('2d').drawImage(v,0,0,...SIZE);dialog.showModal();draw();canvas.focus();
 }
 $('racketOpen').onclick=open;

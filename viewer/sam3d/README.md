@@ -91,6 +91,8 @@ Docker packager copy the vendor files into both Viewer routes.
 ```sh
 node viewer/sam3d/test_orientation.cjs
 node viewer/sam3d/test_mesh_playback.js
+node viewer/sam3d/test_playback_state.cjs
+node viewer/sam3d/test_guide_buffers.cjs
 ```
 
 The orientation test executes the actual Three.js camera matrices for 96
@@ -103,3 +105,35 @@ texture audit on both baseline and candidate pages.
 
 Regenerate and package with `viewer/sam3d/joint_fit/build_full_viewer.py` and
 `deploy/3dpose/prepare.py`. See `deploy/3dpose/README.md` for deployment.
+
+Playback hardening: editing cancels buffered resume, seeking retains the previous
+scene until video decoding completes, and failed mesh loading offers a retry.
+Guide buffers are reused; coverage sampling runs only while diagnostics are open
+or the explicit texture audit is active. Narrow layouts keep transport above the
+views. Network recovery and browser compatibility still require browser testing.
+
+## Conservative texture edges
+
+The default edge repair searches at most one mask texel in each direction. It
+samples color at a high-confidence mask location only when source depth agrees;
+it retains the original projected visibility test and caps recovered confidence.
+The advanced setting can disable repair for A/B comparison. Unobserved surfaces
+remain gray: reducing gray weight does not establish texture accuracy.
+
+`mesh_meta.json` may declare `image_size: [width, height]` (the coordinate system
+of focal lengths, not necessarily encoded video dimensions) and
+`mask_atlas_grid: [columns, rows]`. Tile resolution is derived from the atlas.
+Legacy defaults are 1280x720 and 16x16. Mirror projection uses image bounds,
+depth and the mirror mask instead of a clip-specific rectangular region.
+New videos still require their own matched geometry, camera, masks and mirror
+calibration; the existing preprocessing and 2D annotation tools are not yet a
+general video import pipeline. Candidate temporal texture remains disabled
+because its cache is empty and its vertex correspondence has not been validated.
+
+Run `node viewer/sam3d/test_texture_layout.cjs` for metadata validation.
+
+Candidate back-view fix: mirror observations are enabled by default and the
+experimental mirror checkbox remains visible. Source-camera depth and mirror
+person masks still gate every projected sample. The mirror calibration is an
+estimate; remaining holes or misalignment are not validated by coverage alone.
+Regression: `node viewer/sam3d/test_candidate_texture.cjs`.

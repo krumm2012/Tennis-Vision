@@ -1,0 +1,10 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync(__dirname+'/joint_fit/build_full_viewer.py','utf8');
+const script=source.match(/<script>(window\.TENNIS_JOINT_CANDIDATE=true;.*?)<\/script>/s)[1];
+const controls=new Map();const $=id=>{if(!controls.has(id)){const label={hidden:false};controls.set(id,{checked:true,disabled:false,closest:()=>label})}return controls.get(id)};
+vm.runInNewContext(script,{window:{},$});
+assert.equal($('mirrorTexture').checked,true,'candidate back view must retain its available mirror texture source');
+assert.equal($('mirrorTexture').disabled,false,'mirror texture must remain user controllable');
+assert.equal($('mirrorTexture').closest('label').hidden,false,'mirror texture control must be visible');
+assert.equal($('temporalTexture').checked,false,'empty temporal cache must remain disabled');
+console.log('PASS: candidate mirror texture enabled and controllable; empty temporal cache disabled');

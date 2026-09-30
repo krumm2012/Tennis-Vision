@@ -1,0 +1,16 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const context={console,AbortController};vm.createContext(context);
+vm.runInContext(fs.readFileSync(__dirname+'/vendor/three-0.180.0.min.js','utf8'),context);
+vm.runInContext(fs.readFileSync(__dirname+'/mesh_renderer.js','utf8')+'\nthis.Renderer=SamMeshRenderer;',context);
+const T=context.THREE,r=Object.create(context.Renderer.prototype);
+r.guides=new T.Group();r.guideLines=new Map();r.jointDots=new T.Points(new T.BufferGeometry());
+const segment=x=>({points:[[0,0,0],[x,1,0]],color:'#fff',width:2});
+r.setGuides([segment(1)],[{points:[[1,0,0]],color:'#fff'}]);
+const line=[...r.guideLines.values()][0],geometry=line.geometry,points=r.jointDots.geometry;
+let disposed=0;geometry.addEventListener('dispose',()=>disposed++);points.addEventListener('dispose',()=>disposed++);
+for(let i=0;i<100;i++)r.setGuides([segment(i)],[{points:[[i,0,0]],color:'#fff'}]);
+assert.equal(disposed,0);assert.equal(line.geometry,geometry);assert.equal(r.jointDots.geometry,points);
+assert.equal(geometry.attributes.instanceEnd.getX(0),99);
+r.setGuides([],[]);assert.equal(line.visible,false);assert.equal(points.drawRange.count,0);
+r.setGuides(Array.from({length:100},(_,i)=>segment(i)),[]);assert.equal(line.geometry.instanceCount,100);
+console.log('PASS: 100 guide updates reuse buffers; empty and growing geometry handled');
