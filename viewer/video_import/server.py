@@ -86,6 +86,10 @@ class Library:
                 with (run/'mirror.log').open('w') as log:
                     completed=subprocess.run([sys.executable,str(REPO/'viewer/video_import/estimate_mirror.py'),'--dataset',str(folder),'--result',str(work/'result'),'--model',mirror_model,'--device',os.environ.get('VIEWER_RACKET_DEVICE','mps')],stdout=log,stderr=subprocess.STDOUT,timeout=1800)
                 write_record(work/'result/mirror_generation_status.json',{'status':'ready' if completed.returncode==0 else 'needs_review','exit_code':completed.returncode})
+            if racket_model:
+                self.update(ident,message='正在修正掌内握拍与拍面角度')
+                with (run/'grip.log').open('w') as log:
+                    subprocess.run([sys.executable,str(REPO/'viewer/video_import/fit_dataset_grip.py'),'--dataset',str(folder),'--result',str(work/'result')],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1800)
             remote=work/'remote_manifest.json'
             if remote.exists():manifest['remote']=json.loads(remote.read_text())
             manifest.update(status='ready',finished_at=now(),artifact_sha256={'reconstruction.npz':sha256(work/'reconstruction.npz')})

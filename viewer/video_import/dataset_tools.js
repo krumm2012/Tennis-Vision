@@ -23,7 +23,7 @@ window.drawDatasetOverlay=()=>{const r=overlay.getBoundingClientRect(),d=deviceP
 window.initDatasetTools=async()=>{
  try{const r=await fetch('calibration_annotations.json',{cache:'no-store'});if(r.ok){const data=await r.json();if(data.video_sha256===current().video_sha256)marks=data}}catch{}refreshStatus();
  $('mirrorEnabled').disabled=!current().mirror_available;$('mirrorEnabled').checked=!!current().mirror_available;if(current().mirror_available){try{const report=await fetch('mirror_calibration_report.json',{cache:'no-store'}).then(r=>r.json());$('calibrationStatus').textContent=`镜面已启用 · ${report.mask_frames}/${current().frames} 帧镜中遮罩 · ${report.heldout_median_px!==undefined?'留出关节误差 '+report.heldout_median_px.toFixed(1):'配对点 RMS '+report.rms_px.toFixed(1)} px · 估计值`}catch{}}
- window.datasetRacket=new DatasetRacketLayer();try{await window.datasetRacket.load(renderer);const s=window.datasetRacket.summary;$('racketStatus').textContent=s?`观测 ${s.observed} · 补间 ${s.interpolated} · 隐藏 ${s.hidden} 帧 · 拍面方向待复核`:'尚无本视频球拍观测'}catch(e){$('racketStatus').textContent=e.message}
+ window.datasetRacket=new DatasetRacketLayer();try{await window.datasetRacket.load(renderer);const s=window.datasetRacket.summary;$('racketStatus').textContent=s?`观测 ${s.observed} · 估计 ${s.interpolated} · 隐藏 ${s.hidden} 帧${s.mirror_observations!==undefined?` · 镜中拍框 ${s.mirror_observations} · 掌内握点`:""} · 握柄棱位待确认`:'尚无本视频球拍观测'}catch(e){$('racketStatus').textContent=e.message}
  $('racketEnabled').disabled=!window.datasetRacket.state;draw();
 };
 for(const id of ['showMarkers','mirrorEnabled'])$(id).onchange=draw;$('racketEnabled').onchange=e=>{if(window.datasetRacket)window.datasetRacket.enabled=e.target.checked;draw()};

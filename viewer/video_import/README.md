@@ -110,3 +110,7 @@ python3 viewer/video_import/estimate_mirror.py \
 Without adequate evidence, the automatic stage records needs_review and publishes the available body/racket; manual paired calibration remains available. It never supplies default-video mirror poses to another video. Outputs: mirror_pose.json, mirror_joint_fit_report.json, mirror_calibration_report.json and updated mirror plane/masks. The plane and model scale remain monocular estimates, not measured camera geometry.
 
 The local Docker release is documented in ../../deploy/3dpose/README.md and uses port 18769. Its UI and assets are in the image; videos are mounted read-only and the Mac service on 18768 performs writes and MPS/GPU job dispatch.
+
+### 新视频的握持与拍面
+
+启用球拍权重时，自动运行 `fit_dataset_grip.py`。方法沿用默认 demo 的 MCP/PIP 掌内握点和有方向杆轴，加上真人/镜中拍框与整段时序旋转约束。可靠观测不足的原隐藏帧仍隐藏；约束估计以橙色显示。源视频哈希、原 wrist 拟合、检测候选、握持先验和拟合记录保存在本视频结果目录；不读取 demo 的姿态序列。当前只支持右手握持，不能确认握柄棱位或真实手指接触。云 GPU 部署与生成步骤见 CLOUD_GPU_PLAN.md；本机握持后处理无需重新调用 SAM3D。

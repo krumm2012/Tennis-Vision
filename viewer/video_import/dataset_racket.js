@@ -14,10 +14,10 @@ class DatasetRacketLayer {
   const mesh=new THREE.Mesh(geometry,material);mesh.frustumCulled=false;mesh.visible=false;mesh.renderOrder=1;renderer.scene.add(mesh);this.state={mesh,uniforms};renderer.addLayer(this);
  }
  update(renderer,n,mode){
-  if(!this.state)return;const row=this.rows[n];this.state.mesh.visible=this.enabled&&row?.status==='fitted';if(!this.state.mesh.visible)return;
-  this.state.uniforms.rotation.value.set(...row.rotation_camera_columns.flat());this.state.uniforms.translation.value.fromArray(row.translation_camera_m);this.state.uniforms.estimated.value=row.quality==='interpolated'?1:0;
+  if(!this.state)return;const row=this.rows[n];const label=document.getElementById('gripStatus');if(label)label.textContent=row?.status==='fitted'&&row.face_angle_to_camera_deg!==undefined?`掌内握点 · 拍面法线与相机 ${row.face_angle_to_camera_deg.toFixed(0)}° · ${row.quality==='silhouette_fitted'?'轮廓支持':'约束估计'}${row.mirror_observation_used?' · 镜中拍框支持':''}`:'';this.state.mesh.visible=this.enabled&&row?.status==='fitted';if(!this.state.mesh.visible)return;
+  this.state.uniforms.rotation.value.set(...row.rotation_camera_columns.flat());this.state.uniforms.translation.value.fromArray(row.translation_camera_m);this.state.uniforms.estimated.value=row.quality!=='silhouette_fitted'?1:0;
  }
  overlay(context,transform,n){
-  const row=this.rows[n];if(!this.enabled||row?.status!=='fitted')return;context.strokeStyle=row.quality==='interpolated'?'#ffbd62':'#6ce5a3';context.lineWidth=1.5;context.beginPath();row.projected_head_outline?.forEach((p,i)=>{const q=transform(p);i?context.lineTo(...q):context.moveTo(...q)});context.closePath();context.stroke();
+  const row=this.rows[n];if(!this.enabled||row?.status!=='fitted')return;context.strokeStyle=row.quality!=='silhouette_fitted'?'#ffbd62':'#6ce5a3';context.lineWidth=1.5;context.beginPath();row.projected_head_outline?.forEach((p,i)=>{const q=transform(p);i?context.lineTo(...q):context.moveTo(...q)});context.closePath();context.stroke();
  }
 }

@@ -15,13 +15,13 @@ def enrich(folder,model_path,device='mps',hand='right',result=None):
     archive=folder/'attempts'/f'{attempt:04d}'/'work/reconstruction.npz'
     with np.load(archive,allow_pickle=False) as d:joints=d['joints'].copy();roots=d['source_roots'].copy();focals=d['focal'].copy()
     model=json.loads((ROOT/'output/sam3d_cloud/wilson_model.json').read_text())['model'];detector=YOLO(str(model_path));size=meta['image_size'];count=meta['frames'];fps=meta['fps'];wrist_id=41 if hand=='right' else 62
-    cap=cv2.VideoCapture(str(folder/'source.mp4'));people=[];rows=[];previous=None
+    cap=cv2.VideoCapture(str(folder/'source.mp4'));people=[];rows=[];all_rackets=[];previous=None
     for n in range(count):
         ok,image=cap.read()
         if not ok:raise ValueError('视频帧数与姿态不一致')
         wrist=joints[n,wrist_id]+roots[n];wuv=project(wrist[None,:],focals[n],size)[0]
         found=detector.predict(image,classes=[0,38],conf=.015,imgsz=1280,device=device,verbose=False)[0]
-        persons=[];candidates=[]
+        persons=[];candidates=[];rackets=[]
         if found.masks is not None:
             for k,box in enumerate(found.boxes):
                 polygon=found.masks.xy[k];cls=int(box.cls[0]);confidence=float(box.conf[0]);xyxy=box.xyxy[0].cpu().numpy()
@@ -30,11 +30,12 @@ def enrich(folder,model_path,device='mps',hand='right',result=None):
                     simplified=cv2.approxPolyDP(polygon.astype(np.float32),.75*size[0]/1280,True).reshape(-1,2)
                     persons.append({'box':xyxy.tolist(),'polygon':simplified.round(1).tolist(),'confidence':confidence})
                 elif cls==38:
+                    rackets.append({'box':xyxy.tolist(),'polygon':polygon.round(1).tolist(),'confidence':confidence})
                     distance=float(np.linalg.norm(np.maximum(np.maximum(xyxy[:2]-wuv,wuv-xyxy[2:]),0)))
                     if distance<75*size[0]/1280 and confidence>=.04:
                         ellipse=head_ellipse(polygon)
                         if ellipse is not None:candidates.append((confidence*np.exp(-distance/30),confidence,ellipse,polygon))
-        people.append({'frame':n,'persons':persons});row={'frame':n,'status':'missing_observation','review_reasons':['missing_observation']}
+        all_rackets.append({'frame':n,'candidates':rackets});people.append({'frame':n,'persons':persons});row={'frame':n,'status':'missing_observation','review_reasons':['missing_observation']}
         if candidates:
             _,confidence,ellipse,polygon=max(candidates,key=lambda c:c[0])
             result=fit_shape(ellipse,wrist,wuv,focals[n],model,previous,image_size=size)
@@ -60,6 +61,7 @@ def enrich(folder,model_path,device='mps',hand='right',result=None):
     summary={'frames':count,'observed':observed,'interpolated':sum(r.get('quality')=='interpolated' for r in rows),'hidden':sum(r['status']!='fitted' for r in rows),'hand':hand,'mono_plane_ambiguity':True}
     payload={'version':1,'video_id':folder.name,'video_sha256':meta['video_sha256'],'fps':fps,'image_size':size,'model':model,'summary':summary,'frames':rows}
     shutil.copy2(ROOT/'output/sam3d_cloud/wilson_mesh.bin',out/'wilson_mesh.bin');write(out/'wilson_model.json',{'model':model});write(out/'person_candidates.json',{'video_sha256':meta['video_sha256'],'image_size':size,'frames':people});write(out/'racket_poses.json',payload)
+    write(out/'racket_candidates.json',{'video_sha256':meta['video_sha256'],'image_size':size,'frames':all_rackets})
     write(out/'enrichment_manifest.json',{'video_sha256':meta['video_sha256'],'detector_sha256':sha256(model_path),'model_mesh_sha256':sha256(out/'wilson_mesh.bin'),'racket_poses_sha256':sha256(out/'racket_poses.json'),'person_candidates_sha256':sha256(out/'person_candidates.json'),'git_commit':revision(ROOT),'code_sha256':sha256(Path(__file__)),'finished_at':now(),'summary':summary})
     print(json.dumps(summary),flush=True)
 
