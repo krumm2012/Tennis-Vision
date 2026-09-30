@@ -30,7 +30,9 @@ class ImportTests(unittest.TestCase):
  def test_package_uses_own_geometry_and_rejects_frame_mismatch(self):
   archive=self.root/'reconstruction.npz';v=np.array([[[0,0,1],[1,0,1],[0,1,1]]]*3,dtype=np.float32)
   np.savez(archive,vertices=v,faces=np.array([[0,1,2]]),source_roots=np.zeros((3,3)),focal=np.ones(3)*50,masks=np.ones((3,24,32),np.uint8)*255)
-  package(self.video,archive,self.root/'result');meta=json.loads((self.root/'result/mesh_meta.json').read_text());self.assertEqual(meta['frames'],3);self.assertEqual(meta['image_size'],[64,48]);self.assertFalse(meta['mirror_available'])
+  package(self.video,archive,self.root/'result');meta=json.loads((self.root/'result/mesh_meta.json').read_text());self.assertEqual(meta['frames'],3);self.assertEqual(meta['image_size'],[64,48]);self.assertFalse(meta['mirror_available']);self.assertTrue(meta['stabilization_available']);self.assertTrue((self.root/'result/quality_report.json').is_file())
+  import cv2
+  self.assertEqual(int(cv2.imread(str(self.root/'result/person_masks_sam2.png'))[0,0,2]),255)
   np.savez(archive,vertices=v[:2],faces=np.array([[0,1,2]]),source_roots=np.zeros((2,3)),focal=np.ones(2)*50,masks=np.ones((2,24,32),np.uint8))
   with self.assertRaises(ValueError):package(self.video,archive,self.root/'bad')
  def test_successful_job_publishes_own_viewer(self):
@@ -44,6 +46,7 @@ class ImportTests(unittest.TestCase):
    if state['status'] in ('ready','failed'):break
    time.sleep(.02)
   self.assertEqual(state['status'],'ready',state)
+  folder=self.library.folder(item['id']);manifest=json.loads((folder/'attempts/0001/run_manifest.json').read_text());self.assertEqual(manifest['status'],'ready');self.assertEqual(manifest['source_sha256'],json.loads((folder/'result/mesh_meta.json').read_text())['video_sha256'])
   status,page=self.request('GET',state['viewer']);self.assertEqual(status,200);self.assertIn(b'SamMeshRenderer',page)
  def test_generation_failure_and_restart_recovery(self):
   status,body=self.request('POST','/api/videos?name=clip.mp4',self.video.read_bytes());item=json.loads(body)
@@ -52,6 +55,7 @@ class ImportTests(unittest.TestCase):
    if self.library.read(item['id'])['status']=='failed':break
    time.sleep(.02)
   self.assertEqual(self.library.read(item['id'])['status'],'failed')
-  self.library.update(item['id'],status='generating');other=Library(self.library.root,[]);self.assertEqual(other.read(item['id'])['status'],'failed');other.pool.shutdown()
+  folder=self.library.folder(item['id']);path=folder/'attempts/0001/run_manifest.json';self.assertEqual(json.loads(path.read_text())['status'],'failed')
+  self.library.update(item['id'],status='generating');other=Library(self.library.root,[]);self.assertEqual(other.read(item['id'])['status'],'failed');self.assertEqual(json.loads(path.read_text())['error_type'],'ServiceRestart');other.pool.shutdown()
 
 if __name__=='__main__':unittest.main()

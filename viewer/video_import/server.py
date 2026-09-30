@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import argparse, json, os, re, shutil, subprocess, threading, time, uuid, sys
+from run_records import sha256,write as write_record,now,revision
 from urllib.parse import urlsplit, parse_qs
 
 REPO = Path(__file__).resolve().parents[2]
@@ -23,6 +24,10 @@ class Library:
         self.pool = ThreadPoolExecutor(max_workers=1)
         for item in self.list():
             if item['status'] in ('queued', 'generating'):
+                path=self.folder(item['id'])/'attempts'/f"{item.get('attempt',0):04d}"/'run_manifest.json'
+                if path.exists():
+                    manifest=json.loads(path.read_text());manifest.update(status='failed',finished_at=now(),error_type='ServiceRestart')
+                    write_record(path,manifest)
                 self.update(item['id'], status='failed', message='服务已重启，请重新生成')
 
     def folder(self, ident):
@@ -55,21 +60,38 @@ class Library:
             return item
 
     def run(self, ident):
-        folder = self.folder(ident); work = folder / 'work'
+        folder = self.folder(ident)
+        attempt=self.read(ident).get('attempt',0)+1
+        run=folder/'attempts'/f'{attempt:04d}';run.mkdir(parents=True,exist_ok=False)
+        work=run/'work'
+        manifest={'schema_version':1,'dataset_id':ident,'attempt':attempt,'started_at':now(),'source_sha256':sha256(folder/'source.mp4'),'git_commit':revision(REPO),'status':'generating'}
+        write_record(run/'run_manifest.json',manifest)
         try:
-            self.update(ident, status='generating', message='正在生成人体和人物遮罩')
+            self.update(ident, status='generating', attempt=attempt, message='正在生成人体和人物遮罩')
             if work.exists(): shutil.rmtree(work)
             work.mkdir()
-            with (folder / 'generation.log').open('w') as log:
+            with (run / 'generation.log').open('w') as log:
                 subprocess.run([*self.command,'--video',str(folder/'source.mp4'),'--output',str(work)], stdout=log, stderr=subprocess.STDOUT, check=True, timeout=7200)
             self.update(ident, message='正在校验并打包三维结果')
             from package_result import package
             package(folder/'source.mp4', work/'reconstruction.npz', work/'result')
+            remote=work/'remote_manifest.json'
+            if remote.exists():manifest['remote']=json.loads(remote.read_text())
+            manifest.update(status='ready',finished_at=now(),artifact_sha256={'reconstruction.npz':sha256(work/'reconstruction.npz')})
+            write_record(run/'run_manifest.json',manifest)
+            write_record(work/'result/run_manifest.json',manifest)
+            shutil.copy2(work/'result/quality_report.json',run/'quality_report.json')
             destination = folder/'result'
             if destination.exists(): shutil.rmtree(destination)
             (work/'result').replace(destination)
             self.update(ident, status='ready', message='生成完成', viewer=f'/datasets/{ident}/result/viewer.html')
         except Exception as exc:
+            remote=work/'remote_manifest.json'
+            if remote.exists():
+                try:manifest['remote']=json.loads(remote.read_text())
+                except (OSError,ValueError):pass
+            manifest.update(status='failed',finished_at=now(),error_type=type(exc).__name__)
+            write_record(run/'run_manifest.json',manifest)
             self.update(ident, status='failed', message=f'生成失败：{str(exc)[:240]}。可重试；详细日志保存在本机。')
 
 class Handler(SimpleHTTPRequestHandler):

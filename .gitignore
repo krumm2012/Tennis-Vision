@@ -125,3 +125,6 @@ dist/
 # Optional SAM 3D Body weights (Meta SAM License, gated, not redistributed)
 models/sam3d_body/
 .gstack/
+
+# Local GPU connection configuration (host paths / account details)
+deploy/3dpose/cloud_gpu/*.local.json

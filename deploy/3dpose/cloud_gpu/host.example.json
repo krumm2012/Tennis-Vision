@@ -1,0 +1,11 @@
+{
+  "host": "tennis-gpu",
+  "port": 22,
+  "root": "/workspace/tennis-viewer",
+  "python": "/opt/conda/envs/sam_3d_body/bin/python",
+  "env": {
+    "SAM3D_BODY_CODE": "/workspace/sam-3d-body",
+    "SAM3D_WEIGHTS": "/workspace/weights",
+    "VIEWER_SEGMENTATION_WEIGHTS": "/workspace/models/yolo11n-seg.pt"
+  }
+}

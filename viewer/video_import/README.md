@@ -27,8 +27,8 @@ The built-in runner requires an already installed SAM 3D Body environment and
 locally provisioned model assets. Set:
 
 - `SAM3D_BODY_CODE`: SAM source directory
-- `SAM3D_WEIGHTS`: directory with model.ckpt and assets/mhr_model.pt
-- `SAM3D_FACES`: .npy triangle topology matching those SAM vertices
+- `SAM3D_WEIGHTS`: directory with model.ckpt, model_config.yaml and assets/mhr_model.pt
+- `SAM3D_FACES`: optional .npy triangle topology; defaults to the SAM estimator topology
 - `VIEWER_SEGMENTATION_WEIGHTS`: local Ultralytics person segmentation weights
 
 Use the Python environment containing torch, opencv, numpy, ultralytics and SAM
@@ -59,7 +59,7 @@ It exports `reconstruction.npz` with no pickled objects:
 F must exactly match the normalized input video. Results are validated and
 published only after packaging succeeds; jobs are serialized, have a two-hour
 timeout, and interrupted jobs become retryable failures on restart. Errors are
-shown in the library; detailed runner logs stay in each local dataset folder.
+shown in the library; detailed runner logs stay in attempts/<number>/generation.log; remote logs, hashes and manifests stay in its work/ folder.
 Do not reuse the default video's output as a generator for a new video.
 
 ```sh
@@ -67,3 +67,7 @@ python3 -m unittest discover -s viewer/video_import -p 'test_*.py' -v
 ```
 
 Tests use generated color videos and synthetic geometry, not model inference.
+
+## Existing cloud GPU
+
+Use `deploy/3dpose/cloud_gpu/deploy.sh` to provision the worker scripts into an existing GPU Python environment, then `start_local.py` to connect the local library. See the linked Chinese runbook for configuration, real-video smoke commands, records and limitations.
