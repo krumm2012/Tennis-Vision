@@ -35,7 +35,7 @@ def replay(head, shape, params, expression):
     return vertices*axes,mapped*axes
 
 
-def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, device='cuda'):
+def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, device='cuda', batch_size=16):
     import torch
     from grip_objective import grip_terms,directed_image_loss,reliability,summary
     tensor=lambda x:torch.as_tensor(x,dtype=torch.float32,device=device)
@@ -44,10 +44,10 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
     count=len(params);focal=tensor(meta['focal']);image_size=tensor(meta['image_size'])
     with torch.no_grad():
         mesh_error=[];joint_error=[]
-        for a in range(0,count,16):
-            v,j=replay(head,shape[a:a+16],params[a:a+16],expr[a:a+16])
-            mesh_error.append(float((v-verts0[a:a+16]).abs().max()))
-            joint_error.append(float((j-j0[a:a+16]).abs().max()))
+        for a in range(0,count,batch_size):
+            v,j=replay(head,shape[a:a+batch_size],params[a:a+batch_size],expr[a:a+batch_size])
+            mesh_error.append(float((v-verts0[a:a+batch_size]).abs().max()))
+            joint_error.append(float((j-j0[a:a+batch_size]).abs().max()))
     if max(mesh_error)>1e-4 or max(joint_error)>1e-4:
         raise ValueError('原生 MHR 回放未复现源网格/关节，禁止拟合；检查模型与坐标版本')
     r0=tensor([r['rotation_camera_columns'] for r in poses['frames']]);t0=tensor([r['translation_camera_m'] for r in poses['frames']])
@@ -74,8 +74,8 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
         return p,v,j,r,t
     for iteration in range(steps):
         optimizer.zero_grad();total=0.
-        for a in range(0,count,16):
-            b=min(a+16,count);p,v,j,r,t=current(a,b);world=j+roots[a:b,None]
+        for a in range(0,count,batch_size):
+            b=min(a+batch_size,count);p,v,j,r,t=current(a,b);world=j+roots[a:b,None]
             baseline=j0[a:b]+roots[a:b,None]
             # Preserve full-body projection and original anatomy as priors.
             loss=torch.nn.functional.smooth_l1_loss(project(world,focal[a:b]),project(baseline,focal[a:b]),beta=8)/20
@@ -83,6 +83,7 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
             terms=grip_terms(world,r,t,grip,radius,hand_weight[a:b])
             loss+=sum(terms.values())
             obj=torch.einsum('bij,kj->bki',r,objects)+t[:,None]
+            observation_loss=loss.new_zeros(())
             for i in range(a,b):
                 if i not in train:continue
                 for view in ('points','mirror_points'):
@@ -100,13 +101,14 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
                     if {'rim_side','rim_opposite'}<=set(seen) and not manual[i].get('face_correspondence_confirmed'):
                         u=ids.index(3);v=ids.index(4)
                         swapped=torch.nn.functional.smooth_l1_loss(predicted[[u,v]],observed[[v,u]],beta=4,reduction='none').mean(-1)*w[[u,v]]
-                        loss+=(residual.sum()-residual[[u,v]].sum()+torch.minimum(residual[[u,v]].sum(),swapped.sum()))/len(ids)/10
-                    else:loss+=residual.mean()/10
+                        observation_loss+=(residual.sum()-residual[[u,v]].sum()+torch.minimum(residual[[u,v]].sum(),swapped.sum()))/len(ids)/10
+                    else:observation_loss+=residual.mean()/10
                     if {'handle_end','tip'}<=set(seen):
                         endpoints=tensor([seen['handle_end'],seen['tip']])
                         if torch.linalg.vector_norm(endpoints[1]-endpoints[0])>=4:
-                            loss+=min(weights.get('handle_end',evidence_weight),weights.get('tip',evidence_weight))*directed_image_loss(uv[[0,2]],endpoints)*.4
-            scaled=loss*(b-a)/count
+                            observation_loss+=min(weights.get('handle_end',evidence_weight),weights.get('tip',evidence_weight))*directed_image_loss(uv[[0,2]],endpoints)*.4
+            # Each observed frame contributes once, independent of batch size.
+            scaled=loss*(b-a)/count+observation_loss/count
             if not torch.isfinite(scaled):raise ValueError('联合拟合出现非有限残差；候选未保存')
             scaled.backward();total+=float(scaled.detach())
         temporal=(delta[2:]-2*delta[1:-1]+delta[:-2]).square().mean()*.5
@@ -118,8 +120,8 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
         if iteration%20==0:print(f'MHR joint iteration {iteration}: {total:.5f}',flush=True)
     out={};vertices=[];joints=[];parameters=[];rotations=[];translations=[]
     with torch.no_grad():
-        for a in range(0,count,16):
-            p,v,j,r,t=current(a,min(count,a+16))
+        for a in range(0,count,batch_size):
+            p,v,j,r,t=current(a,min(count,a+batch_size))
             for target,value in [(vertices,v),(joints,j),(parameters,p),(rotations,r),(translations,t)]:target.append(value.cpu().numpy())
     out.update(vertices=np.concatenate(vertices),joints=np.concatenate(joints),mhr_model_params=np.concatenate(parameters),
                racket_rotation=np.concatenate(rotations),racket_translation=np.concatenate(translations),source_roots=data['source_roots'])
@@ -164,7 +166,7 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
     heldout_after=observation_diagnostics(out['racket_rotation'],out['racket_translation'],heldout)
     observation_gate=all(heldout_after[k]['p95']<=v['p95']+1e-3 for k,v in heldout_before.items() if v['samples'])
     contact_gate=all(after_contact[k]['p95']<=before_contact[k]['p95']+1e-3 for k in ['palm_gap_mm','finger_radial_gap_mm','handle_segment_gap_mm','hand_shaft_deg','rotation_step_deg','angular_acceleration_deg_frame2'])
-    report={'objective_version':'confidence_observations_v3','contact_before':before_contact,'contact_after':after_contact,
+    report={'objective_version':'confidence_observations_v3_normalized','contact_before':before_contact,'contact_after':after_contact,
             'contact_and_direction_gate_passed':bool(contact_gate),'heldout_observation_gate_passed':bool(observation_gate),
             'heldout_observations_before':heldout_before,'heldout_observations_after':heldout_after,'hand_prior_downweighted_frames':int((hand_weight<1).sum()),
             'observation_policy':'manual frames replace auto; per-point confidence/uncertainty; heldout frames excluded; unverified rim sides unordered',
@@ -177,7 +179,7 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
             'full_body_joint_fit_completed':True,'camera_roots_preserved':True,'shape_and_scale_preserved':True,
             'dimensions_measured':calibration['measured'],'physical_grip_bevel_verified':False,
             'contact_method':'MCP/PIP corridor; bidirectional proximal-joint/cylinder gap; finite handle; directed shaft; not mesh surface contact',
-            'validation_source':readiness['validation_source'],'requires_visual_review':True,'published_to_viewer':False,'steps':steps}
+            'validation_source':readiness['validation_source'],'requires_visual_review':True,'published_to_viewer':False,'steps':steps,'batch_size':batch_size}
     return out,report
 
 
