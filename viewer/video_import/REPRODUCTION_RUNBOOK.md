@@ -780,3 +780,28 @@ python3 viewer/video_import/audit_racket_jitter.py \
 8 项相关测试通过（5 项目标/批次一致性，3 项观测测试，包含新门控对人工/保留帧隔离和快速运动保护）。v9 输入、代码和门控记录保存到 `iterations/grip_refit_v9/`；沿用 v8 冻结输入和验证集。云 SSH 再次返回 Connection closed，部署未成功，也未调度 v9 云 job。**尚无门控后 GPU 结果，未更新 Viewer，未新增已完成 MHR 拟合计数。** Graphify 仍因缺少模块未完成。
 
 恢复连接后：先部署当前版本，再用 `run_fullbody_refit.py --dataset .../iterations/grip_refit_v9/staged --native-output .../iterations/grip_refit_v6/native --output .../iterations/grip_refit_v9/gpu-fit --config deploy/3dpose/cloud_gpu/host.local.json --allow-assumed --allow-automatic` 执行。保留 v8 对照、固定观测和原阈值，报告单点门控的真实效果，不预设改善。
+
+### v9 云恢复后的实际结果（2026-10-01 21:29–21:31，UTC+8）
+
+先前的连接阻塞已解除，本次成功执行 job `62da04039fa145cb8f4b385478b68f25`，RTX 4090 运行 120 步并返回约 48 MiB 候选。部署代码为 `3ae022b200c1d9e724a0cda6b596a475421dbe5a`；候选 SHA `f3a4c2eea2e3c0f8ca850bc2fe9e823420cd63671d8e15d4af19107bc7bf492b` 已与远端清单、报告及本地文件核对。执行完成，验收拒绝；自动完成度台账已更新。
+
+使用 `compare_refit_runs.py` 对 v8 归一化版与 v9 比较。该脚本要求源视频/原生档案、训练和保留帧相同，且冻结的人体元数据、镜面、人工标记、自动点、尺寸和初始球拍 JSON 哈希完全相同，候选文件通过哈希核验后才输出差值。
+
+```sh
+python3 viewer/video_import/compare_refit_runs.py \
+  --before output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v8/gpu-fit-normalized \
+  --after output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v9/gpu-fit \
+  --output output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v9/comparison.json
+```
+
+| 指标 | v8 归一化 | v9 单点降权 |
+| --- | ---: | ---: |
+| 角加速度 P95 / °每帧² | 9.236806 | 9.236820 |
+| 旋转步进 P95 / °每帧 | 26.773760 | 26.750616 |
+| 真人保留点误差中位数 / canonical px | 7.627023 | 7.626994 |
+| 掌内握点距离中位数 / mm | 4.265179 | 4.264485 |
+| 身体位移 P95 / mm | 17.545190 | 17.528873 |
+
+变化很小，没有整体抖动改善证据；没有测量 GPU 重复运行噪声，不能把微小差值当作有效提升。只有一个镜中拍喉点被降权，实验说明处理该点不足以解释或解决主要抖动，并不排除其他类型的自动观测错误。
+
+本轮没有替换 Viewer 或更改发布门槛。下一步应集中检查观测缺失/恢复与人工/自动约束交接处，按原视频分辨真实运动与观测不连续，再设计区间连续性约束。先前审计的“13/15 靠近边界”仍是相关线索，不应直接当作因果结论。新增比较脚本实际运行成功；Graphify 仍因本机缺少模块未完成。
