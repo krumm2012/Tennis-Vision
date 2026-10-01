@@ -19,6 +19,8 @@ Repository: `/Users/krum5539/Documents/Tennis-Vision`; commands run from its roo
 
 ## Execution
 
+For reproducible environment/model identities, step-by-step generation/fusion/refit commands, interrupted-job recovery and backup, read `viewer/video_import/REPRODUCTION_RUNBOOK.md`. Its `REPRODUCTION_BASELINE.json` binds observed environments and preserved reports; runtime inventories are not validated installation lockfiles. Use saved staging inputs and fixed observations to reproduce a historical fit, rather than the subsequently edited live Viewer annotations.
+
 Read each CLI's `--help` before use; output paths must remain scoped to the target video. GPU host configuration is private at `deploy/3dpose/cloud_gpu/host.local.json`. Deploy versioned sources using `deploy.py`, infer through `cloud_adapter.py`, and keep `remote_job.json`, manifests, logs and verified archive hashes. Do not print credentials.
 
 Local Viewer: `http://127.0.0.1:18769/datasets/DATASET_ID/result/viewer.html`; write API: port 18768. Use the Browser skill for visible UI checks. Docker image assets require a rebuild; dataset binaries are a live read-only mount. Do not change bakewell.cloud when the task is local.

@@ -1,5 +1,10 @@
 # Local video import and generation
 
+For end-to-end reproducible commands, environment/model identities, input/output
+contracts, recovery and backup, start with
+[REPRODUCTION_RUNBOOK.md](REPRODUCTION_RUNBOOK.md). The observed environment and
+historical artifact digests are in [REPRODUCTION_BASELINE.json](REPRODUCTION_BASELINE.json).
+
 Cloud GPU deployment components, execution contracts, generated-data inventory,
 and per-run records are tracked in [CLOUD_GPU_PLAN.md](CLOUD_GPU_PLAN.md).
 

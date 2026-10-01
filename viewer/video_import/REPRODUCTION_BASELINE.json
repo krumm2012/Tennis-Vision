@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "record_date": "2026-10-01",
+  "purpose": "Reproduction baseline, environment inventory captured read-only; no inference run this round.",
+  "local": {
+    "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "git_commit": "b84045a99440d8b01c5c5cb5588631ca0eb9520e",
+    "ffmpeg": "ffmpeg version 8.0.1 Copyright (c) 2000-2025 the FFmpeg developers"
+  },
+  "local_dependency_versions": {
+    "torch": "2.10.0",
+    "numpy": "2.4.2",
+    "scipy": "1.17.0",
+    "numba": "0.63.1",
+    "opencv-python": "4.13.0.92",
+    "ultralytics": "8.4.14"
+  },
+  "cloud": {
+    "python": "3.12.9 | packaged by Anaconda, Inc. | (main, Feb  6 2025, 18:56:27) [GCC 11.2.0]",
+    "platform": "Linux-5.15.0-164-generic-x86_64-with-glibc2.35",
+    "nvidia_smi": "NVIDIA GeForce RTX 4090, 610.43.03, 24564 MiB",
+    "sam3d_git_commit": "b5c765a0d89d789985e186d396315e7590887b94",
+    "sam2_git_commit": "2b90b9f5ceec907a1c18123530e92e794ad901a4",
+    "worker_config_git_commit": "dabccb9499aa5336ad8fd4b074657c194423fa61",
+    "model_sha256": {
+      "/root/tennis-sam3d/weights/model.ckpt": "3b1cb897f4bbd977bf81cbb0b30780a9582681ac642ee112865790ceb4d66056",
+      "/root/tennis-sam3d/weights/model_config.yaml": "d2e772e108b8727e9367681845fecb32806144acd0debc20868d100689470570",
+      "/root/tennis-sam3d/weights/assets/mhr_model.pt": "352e271a6c42729c68554ceaea0c955e866970160c31e35506d782dc0f7377bc",
+      "/root/tennis-viewer/models/yolo11n-seg.pt": "55ed65c56c91713d23e8402371c6c49a6fd84f257f7dce452e8d70e41dcbe152",
+      "/root/tennis-sam3d/sam2_work/sam2.1_hiera_small.pt": "6d1aa6f30de5c92224f8172114de081d104bbd23dd9dc5c58996f0cad5dc4d38"
+    },
+    "deployed_code_sha256": {
+      "export_mhr_uv.py": "c95faa2208780c6d07a9d61a45ae4c99ff3d914249d85887282ad51a6d3f0148",
+      "generate_multiview.py": "6ee0cab9ad6273882fdf4d484eabaa5d21d5b7a3a53588209efb7973e0996905",
+      "generate_sam.py": "26c3a7b26e4eadf34271c8fd7db50e6e20a784ccc405f6fa84d991b45a425e9f",
+      "mhr_parameters.py": "ad73f57e50264fd4a5c2a34644fb4f6cf47f118c5fb10b2e2cdb94f1bc911780",
+      "racket_calibration.py": "dc3a33e465229601212d7efb0ef7b53d60ad34128b58e0b3fac9e46bd73721be",
+      "racket_landmarks.py": "862a99c4b6c9ec75fa96f5dfb39f0f8a7ed1aac729678c3263dba970b07e111b",
+      "refit_fullbody.py": "57348f231914940f3dc13cbde3370721aa8f8bea44ffa68cc087b0266116aa93",
+      "refit_readiness.py": "436748da8a267504bc6a90b39aef12ccf0fdd23db4e9c14ec6b6d19109c88279",
+      "run_records.py": "5774707a35bd2c4f133bea180e1dde69cd6484955751b0d41797070f98eee890",
+      "worker.py": "b317d06d288c76c5ca464fda7d5b3fdcead069a988f84195650e47e1711e7497"
+    }
+  },
+  "cloud_dependency_versions": {
+    "torch": "2.4.0",
+    "torchvision": "0.22.1",
+    "numpy": "1.26.4",
+    "scipy": "1.15.3",
+    "opencv-python": "4.11.0.86",
+    "ultralytics": "8.4.7",
+    "SAM-2": "1.0"
+  },
+  "private_full_snapshots": {
+    "output/reproduction/2026-10-01/cloud_environment.json": "55b51812365cb77465e47d21ed18054db7ad70cc7565899555352b77591044a1",
+    "output/reproduction/2026-10-01/local_environment.json": "0d9873f7b059b4a28cbfeac9678269da678bf61f0327b6fe50e14272efd8cdcb",
+    "output/reproduction/2026-10-01/cloud_packages.txt": "c9d94345c949b21ebaf57c7e09ef33f85532e69a549df8a086ff1c2033a6fe56",
+    "output/reproduction/2026-10-01/local_packages.txt": "8b04ccffabf8a534e54718177706e5f0e1aa6b7951883df5caf4aa25ad603068",
+    "output/reproduction/2026-10-01/local_code_hashes.json": "65de2733d85e539d8b7de69976fa6b9bc0504a93230e89a9c078a179b76f6ff0"
+  },
+  "preserved_data_reports": {
+    "output/multivideo_texture/batch_manifest.json": "351362f77e206c68b25cd5fab852e9a670b71b3cb54b3a069d0b4ec48a5a9e1d",
+    "output/multivideo_texture/source_index.json": "fba0369210f14ce5ab0219ecb5be7a4f84936e7d68b8da5edb10bed1ba397c55",
+    "output/multivideo_texture/inventory.json": "e36ae84c6cbae98f06059dfc67b24abd75a3ffb485000a3bd2471b5355a7f4cf",
+    "output/multivideo_texture/mhr_uv.json": "e4c237b0a87715ae243b5c239d8f3ee3ad5f2f73164e740e30f255f44e4da6a0",
+    "output/multivideo_texture/mhr_uv.npz": "a79adc6692464cc971fc9f8d28cfca3db0f3506a0bcfffe1605ed19cc2e5364c",
+    "output/multivideo_texture/fusion_independent/texture_report.json": "d7d250d9fc282e56445ecbc58326ff0905204e653e342f9f5a2eb88d3271e114",
+    "output/multiagent_gpu/texture_quality/consistency_v1/comparison_report.json": "07286d0e977c52df70f313115d40ee97517b85a039e3b59c63874570876b8c69",
+    "output/multiagent_gpu/texture_quality/consistency_v1/texture_report.json": "a542b984fcbfbaf24c77df0b79112327f0d368ee19677abee93ceae8f68baef6",
+    "output/multiagent_gpu/native_audit/reports/native_audit_report.json": "6d471260a3e9c03fafa6d85143671f033bf3472a4419034bf57b70ebe5446bf9",
+    "output/mhr_fit_progress/ledger.json": "4d5fe191e8a572410752283179953b28c965e282b9aa67ac00d6b280b60aa400"
+  },
+  "claim_limits": "Full distribution lists record observed versions, not a validated cross-platform lockfile. Historical GPU code identity comes from each remote manifest, never from this final documentation commit.",
+  "local_recalculation": {
+    "output": "output/reproduction/2026-10-01/local_comparison",
+    "mode": "compare-only; candidate atlas was not rerendered",
+    "matches_historical_fixed_metrics": {
+      "fixed_all_clips_baseline": true,
+      "fixed_all_clips_candidate": true,
+      "baseline_edges": true,
+      "candidate_edges": true,
+      "face_support": true
+    },
+    "heldout_count": 1463590,
+    "baseline_mae": 19.715998408619264,
+    "candidate_mae": 12.831933993544299,
+    "comparison_sha256": "b00b45a634d9acbeaeb4a25086104a8ead578c5d419c005ee200842deb2384d8"
+  },
+  "validation": {
+    "cli_help_scripts_checked": 19,
+    "shell_blocks_checked": 24,
+    "python_blocks_compiled": 8,
+    "relative_links_exist": true,
+    "reports_sha256": {
+      "output/reproduction/2026-10-01/documentation_validation.json": "a7f32e8fb28671f09a00a8562b22f627fa002e9aaabf50cacfe502519998557c",
+      "output/reproduction/2026-10-01/cli_help_validation.json": "18707abe59e79494f3c3f649982e53a30d0fabdca8d1dc52d6839a049126b30a"
+    }
+  }
+}

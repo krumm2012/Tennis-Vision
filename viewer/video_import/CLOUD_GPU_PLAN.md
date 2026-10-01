@@ -1,5 +1,7 @@
 # 云 GPU 生成：阶段 0–1 部署与验收
 
+复现入口：[REPRODUCTION_RUNBOOK.md](REPRODUCTION_RUNBOOK.md)，含环境/模型身份、新旧数据两条路径、恢复区别及历史对照验证。
+
 2026-09-30：已在已有 x-gpu RTX 4090 主机完成真实视频闭环。采用 SSH/SCP 私有传输，复用主机已有 Python/CUDA/SAM 环境；本轮没有构建 GPU Docker 镜像，也没有部署对象存储。默认视频保持原入口，新视频发布独立结果。
 
 ## 1. 实现流程
