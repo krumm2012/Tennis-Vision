@@ -67,8 +67,16 @@ def _recover_context(out):
         context['current_files']+=['remote_job.json','request.json','readiness.json']
         manifest=read('remote_manifest.json') or read('run_manifest.json')
         if manifest.get('remote_job_id')==anchor['remote_job_id']:
-            context['current_files']+=['remote_manifest.json','run_manifest.json','refit_report.json',
-                                       'mhr_refit_candidate.npz','contact_comparison.json','worker.log']
+            context['current_files'] += ['remote_manifest.json'] if read('remote_manifest.json').get('remote_job_id')==anchor['remote_job_id'] else ['run_manifest.json']
+            expected=manifest.get('artifact_sha256',{}).get('mhr_refit_candidate.npz')
+            candidate=out/'mhr_refit_candidate.npz'
+            if expected and candidate.exists() and sha256(candidate)==expected:
+                context['current_files'].append('mhr_refit_candidate.npz')
+            report=read('refit_report.json')
+            if report and manifest.get('refit')==report:
+                context['current_files'].append('refit_report.json')
+            # Logs/comparisons lacking their own run identity are admitted only
+            # when the current attempt's checkpoint already bound them.
             context['remote_status']=manifest.get('status')
         elif snapshot_bound:
             if snapshot.get('provenance',{}).get('candidate_sha256'):

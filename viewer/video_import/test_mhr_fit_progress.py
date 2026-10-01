@@ -211,5 +211,18 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual(c['stages']['body_displacement_regression']['p95_m'],{'nonfinite_value':'nan'})
         self.assertEqual(c['provenance']['source_files']['refit_report.json']['sha256'],sha256(self.out/'refit_report.json'))
 
+    def test_current_manifest_does_not_adopt_older_report_and_candidate(self):
+        self.fixture()
+        run_id='9'*32
+        write(self.out/'progress_attempt.json',{'run_id':run_id,'remote_job_id':run_id,'output':str(self.out.resolve())})
+        write(self.out/'remote_job.json',{'job_id':run_id})
+        write(self.out/'remote_manifest.json',{'remote_job_id':run_id,'status':'ready',
+              'artifact_sha256':{'mhr_refit_candidate.npz':'b'*64}})
+        c=collect(self.out)
+        self.assertEqual(c['run_id'],run_id)
+        self.assertFalse(c['execution']['computed_fit'])
+        self.assertIsNone(c['provenance']['candidate_sha256'])
+        self.assertNotIn('refit_report.json',c['provenance']['source_files'])
+
 
 if __name__=='__main__':unittest.main()

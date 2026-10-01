@@ -138,4 +138,4 @@ HumanNeRF 展示了单目视频的新视角合成，也明确涉及输入没有�
 
 ## 本轮验证
 
-56 项 Python 集成测试通过，包括中断恢复身份一致、旧结果隔离、计算完成但数值拒绝、事件幂等/历史保留、审计完成但验证失败、子集面/UV 双重阈值。仓库和本机的 tennis-racket-fitting skill 校验通过。未启动新的云 GPU 推理或拟合；主 Viewer 球拍保持既有 SHA `20220f335990618508316a814a70ae1c82b072871205a53d4ebc7b6f5e684f12`。按 AGENTS 执行 Graphify 更新仍因本机缺少 `graphify` 模块失败，未额外安装。
+57 项 Python 集成测试通过，包括中断恢复身份一致、旧结果隔离、计算完成但数值拒绝、事件幂等/历史保留、审计完成但验证失败、子集面/UV 双重阈值。仓库和本机的 tennis-racket-fitting skill 校验通过。未启动新的云 GPU 推理或拟合；主 Viewer 球拍保持既有 SHA `20220f335990618508316a814a70ae1c82b072871205a53d4ebc7b6f5e684f12`。按 AGENTS 执行 Graphify 更新仍因本机缺少 `graphify` 模块失败，未额外安装。
