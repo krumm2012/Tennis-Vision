@@ -1,4 +1,4 @@
-// CPU integration regression: source-root changes must not move an interpolated grip.
+// CPU integration regression: the racket must share the body decoded frame and root.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
 const root=path.resolve(__dirname,'../..'),scene=vm.createContext({console,AbortController,TextDecoder,TextEncoder,performance,requestAnimationFrame:()=>0,cancelAnimationFrame:()=>{},document:{getElementById:()=>null}});
 vm.runInContext(fs.readFileSync(path.join(root,'viewer/sam3d/vendor/three-0.180.0.min.js'),'utf8'),scene);
@@ -14,5 +14,9 @@ const renderer={meta,scene:new THREE.Scene(),u:{sourceRoot:{value:new THREE.Vect
  const grip=layer.state.uniforms.translation.value.clone().add(new THREE.Vector3(0,.045,0)).sub(renderer.u.sourceRoot.value);
  assert.ok(grip.distanceTo(new THREE.Vector3(1,2,0))<1e-10,'interpolating camera roots caused spurious grip displacement');
  renderer.video.paused=true;layer.present(renderer,0);assert.ok(layer.state.uniforms.translation.value.distanceTo(new THREE.Vector3(1,1.955,4))<1e-10);
- console.log('PASS: root-invariant interpolation and exact paused frame');
+ renderer.video.paused=false;renderer.video.currentTime=.039;
+ layer.transforms[1].grip.x+=.3;layer.present(renderer,0);
+ const lockedGrip=layer.state.uniforms.translation.value.clone().add(new THREE.Vector3(0,.045,0)).sub(renderer.u.sourceRoot.value);
+ assert.ok(lockedGrip.distanceTo(new THREE.Vector3(1,2,0))<1e-10,'racket advances toward next frame while body remains at decoded frame');
+ console.log('PASS: source-root invariance and body/racket decoded-frame synchronization');
 })().catch(error=>{console.error(error);process.exitCode=1});

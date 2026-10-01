@@ -165,7 +165,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif route.startswith('/assets/'):
 
             name = route.removeprefix('/assets/')
-            if name in ('dataset_tools.js','dataset_racket.js','dataset_racket_review.js'):path=REPO/'viewer/video_import'/name
+            if name in ('dataset_tools.js','dataset_racket.js','dataset_racket_review.js','dataset_appearance.js'):path=REPO/'viewer/video_import'/name
             elif name in ('coaching.js','mesh_renderer.js','vendor/three-0.180.0.min.js'):path=REPO/'viewer/sam3d'/name
             else:return self.send_error(404)
         else:

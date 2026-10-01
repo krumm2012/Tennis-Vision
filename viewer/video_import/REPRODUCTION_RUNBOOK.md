@@ -599,3 +599,39 @@ SSH 凭证和 `host.local.json` 用私有配置备份；模型权重和已安装
 - [多 Agent 云审计与固定留出对照](MULTIAGENT_GPU_ITERATION.md)
 - [MHR 完成度与后续实施](MHR_FIT_PROGRESS.md)
 - [可复用球拍拟合 skill](../../skills/tennis-racket-fitting/SKILL.md)
+
+## 2026-10-01：完整 Viewer 接入九视频纹理与球拍同步修复
+
+用户截图为 `85ade7a072984579831f5cb76e8e5fd3` 的第 106 帧（零基 105，4.20 秒）。此前最新纹理仅发布到独立 `5242a81d6773428090c4ed5274f3015b` 评审页，完整 Viewer 没有 atlas 绑定，因此打开完整 Viewer 不会自动看到新纹理。
+
+现在完整页默认使用已绑定的多视频合成候选，支持切回视频投影。UV seam 顶点通过 `appearance_map.bin` 映射当前显示姿态（raw/smooth/refined），深度与诊断仍保留原始网格。绑定要求源视频出现在纹理输入清单中、三角面逐项一致、布局及 PNG 哈希一致；浏览器再次校验资源哈希和拓扑。灰色区域仍为无观测区。这里的候选展示不是全身几何或真实新视角精度验收。
+
+复现发布：
+
+```sh
+python3 viewer/video_import/publish_dataset_appearance.py \
+  --result output/video_library/85ade7a072984579831f5cb76e8e5fd3/result \
+  --fusion output/multiagent_gpu/texture_quality/consistency_v1 \
+  --layout output/multivideo_texture/mhr_uv.npz
+node viewer/video_import/test_dataset_appearance.cjs
+node viewer/video_import/test_racket_layer.cjs
+python3 -m unittest discover -s viewer/video_import -p test_dataset_appearance.py
+python3 -B deploy/3dpose/prepare_local.py
+VIEWER_BASE_IMAGE=nginx:stable-alpine docker compose -p tennis-3dpose-local \
+  -f output/3dpose_local/compose.yaml --env-file output/3dpose_local/.env up -d --build
+```
+
+发布脚本只写 appearance 文件和 viewer.html，既有文件备份在 `result/appearance_previous/`；不写人体网格、球拍姿态或人工标记。不要把这一纹理绑定到清单外的人或衣着。原生 18768 服务要重启才能识别新增 JS 路由；18769 的 Docker 静态资源已包含该 JS，无需为它中断 Mac API。
+
+截图球拍诊断：
+
+- 第 106 帧旧球拍 `quality=constrained_estimate`，握柄与手部先验方向夹角 91.9005°，不是独立真值角误差。
+- 相对 MCP/PIP 推算握点的差异 7.2912 mm；raw→refined 顶点变化最大 7.9858 mm，不能解释大的方向冲突。
+- 矩阵按行写入 Three Matrix4，与 Python R.tolist 一致；模型本地柄握点 y=0.045 m、长度 0.685 m，没有发现行列转置或模型原点解释错误。
+- 全段旧方向先验夹角中位 39.4645°，P95 128.7026°；第 106 帧更新候选仍为 55.7189°。既有 racket_quality_gate 标记 needs_review，更新候选的部分投影指标退步。因此本轮没有把未通过检查的候选发布成默认姿态。
+- 播放有可复现的显示缺陷：旧代码按 video.currentTime 让球拍插值到下一帧，人体仍按 requestVideoFrameCallback 的已解码帧显示。新增 CPU 回归先失败，修复后通过。现在球拍和人体共享已解码帧；没有改变或声称改进静态拟合准确度。
+- “双视角握拍”改名“双视角手部”，避免把小幅手部约束预览表达成握拍验收；明显方向冲突在主界面显示，角度是手部估计与拍柄方向的差异。
+
+后续拟合应保持当前纹理/姿态独立版本：复核高置信拍柄端点、拍喉和手指对应；把手部可靠性作为权重而非硬真值；在接触、拍框重投影、有向拍柄与时间连续性上共同优化。继续用固定 heldout 与手部接触/运动指标验收，不能仅靠轮廓或掌心零距离宣布可靠。
+
+本轮实测：浏览器完整页默认多视频合成；第 106 帧正背视角及投影切换可用；HTTP atlas 四个文件均匹配发布清单。图索引重建仍因本机缺少 graphify 模块失败，未把该步骤计为通过。

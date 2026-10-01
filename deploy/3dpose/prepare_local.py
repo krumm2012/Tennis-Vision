@@ -9,6 +9,7 @@ def main():
     target=ROOT/'output/3dpose_local';public=target/'public';public.mkdir(parents=True,exist_ok=True)
     assets={
       'import.html':ROOT/'viewer/video_import/import.html',
+      'assets/dataset_appearance.js':ROOT/'viewer/video_import/dataset_appearance.js',
       'assets/dataset_racket.js':ROOT/'viewer/video_import/dataset_racket.js',
       'assets/dataset_racket_review.js':ROOT/'viewer/video_import/dataset_racket_review.js',
       'assets/dataset_tools.js':ROOT/'viewer/video_import/dataset_tools.js',
