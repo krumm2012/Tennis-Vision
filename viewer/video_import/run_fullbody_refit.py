@@ -32,7 +32,12 @@ def run(dataset,native_output,output,c,allow_assumed=False,allow_automatic=False
     ssh(c,[c['python'],worker,'start','--root',c['root'],'--job',job]);deadline=time.monotonic()+6900;last=None
     try:
         while time.monotonic()<deadline:
-            status=json.loads(ssh(c,[c['python'],worker,'status','--root',c['root'],'--job',job]))['status']
+            for retry in range(4):
+                try:
+                    status=json.loads(ssh(c,[c['python'],worker,'status','--root',c['root'],'--job',job]))['status'];break
+                except (OSError,__import__('subprocess').SubprocessError):
+                    if retry==3:raise
+                    time.sleep(3*(retry+1))
             if status!=last:print('GPU fullbody refit',job,status,flush=True);last=status
             if status in ['ready','failed','needs_input']:break
             time.sleep(2)

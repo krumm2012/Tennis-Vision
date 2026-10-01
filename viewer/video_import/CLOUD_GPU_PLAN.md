@@ -128,3 +128,7 @@ python3 -B -m unittest discover -s viewer/video_import -p 'test_*.py' -v
 
 当前自动几何关键点、镜面射线、留出验证、稀疏校准 API 和实际限制见
 [RACKET_DIRECTION_ITERATION.md](RACKET_DIRECTION_ITERATION.md)。
+
+## 多视频纹理与握拍复核
+
+实际运行、数据目录、合成方法和未通过的重拟合候选见 [MULTIVIDEO_TEXTURE_ITERATION.md](MULTIVIDEO_TEXTURE_ITERATION.md)。

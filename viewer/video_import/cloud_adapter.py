@@ -48,7 +48,12 @@ def collect(video,output,c,job,poll=2,timeout=13800):
     last_status=None;last_message=0
     try:
         while time.monotonic()<deadline:
-            state=json.loads(ssh(c,[c['python'],worker,'status','--root',c['root'],'--job',job]))
+            for retry in range(4):
+                try:
+                    state=json.loads(ssh(c,[c['python'],worker,'status','--root',c['root'],'--job',job]));break
+                except (subprocess.SubprocessError,OSError):
+                    if retry==3:raise
+                    time.sleep(3*(retry+1))
             if state['status']!=last_status or time.monotonic()-last_message>=30:
                 print('GPU task',job,state['status'],flush=True)
                 last_status=state['status'];last_message=time.monotonic()
