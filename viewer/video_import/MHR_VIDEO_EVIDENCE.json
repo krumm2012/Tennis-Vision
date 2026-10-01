@@ -1,0 +1,461 @@
+{
+  "schema_version": 1,
+  "snapshot_date": "2026-10-01",
+  "claim_scope": "Existing nine fixed-camera clips, training visibility support only; no complete-fit percentage or hard video-count upper bound.",
+  "source_reports": {
+    "output/video_sufficiency/sufficiency_report.json": "da989687c3f5d45a53bf4112605b86065a6b3b86ca1cd5aa86c4abad1484025b",
+    "output/video_sufficiency/capture_plan/capture_plan.json": "c688444eabe85250677d90e7d7e02b0239bdbcad18bbff582a9656193160fbd0",
+    "output/video_sufficiency/subset_results.json": "ff975696e82df46087351692430ee2aeb2c6fc1f23a130a2c37ef1aa9e7e76ad",
+    "output/video_sufficiency/capture_plan/sample_index.json": "36bb1ccc0aaccecd4c9f2228ddceb9e6c5483901f83c966052b147a0921e4940"
+  },
+  "analysis_code_sha256": "8af038bc54427ba04432d16b5c7789c9b3fd03839e9e0bf9097b872388c01a95",
+  "source_index_sha256": "fba0369210f14ce5ab0219ecb5be7a4f84936e7d68b8da5edb10bed1ba397c55",
+  "layout_sha256": "a79adc6692464cc971fc9f8d28cfca3db0f3506a0bcfffe1605ed19cc2e5364c",
+  "observation_report_sha256": "d7d250d9fc282e56445ecbc58326ff0905204e653e342f9f5a2eb88d3271e114",
+  "clips": [
+    {
+      "video": "48.43",
+      "observations_sha256": "71f833cd51944c7ea2146ba2ba2ef9baa79ac24b3ff8cece37ee59b189cb862d",
+      "normalized_video_sha256": "725446711d7486ade7dbf05526a9fcac593c9e97e0db4347a551ece19a39e82f",
+      "archive_sha256": "1121e7d61b5d625cf396694d8fee26904ab1dfea273eef16315f522d0ce36451"
+    },
+    {
+      "video": "48.53",
+      "observations_sha256": "e4f9340e8445614d9960a38eeb445396d3825139444b55463977c086df0e057e",
+      "normalized_video_sha256": "c42b6626e3287adc47ad0cac1aa1f8126f482b8363e67e89ad3df5427a861dc5",
+      "archive_sha256": "b9c52dff4682eb7499f9a0de8e2e99ea712bc5023a43b68380808d2f150a979a"
+    },
+    {
+      "video": "49.03",
+      "observations_sha256": "f4415d9ac798a0d04d73e5f11323c784a19d2b67dafd8f0b71eaa7746564b648",
+      "normalized_video_sha256": "f5c2f0e0afbf6ac94e476c766b94ca7ed8deaed2dcd30d7c867cddd5a86a9631",
+      "archive_sha256": "652cfcdfb9b8662772aa77ede5b138b3ecd63f3d6314c52ec2d8e5ebfd920944"
+    },
+    {
+      "video": "49.13",
+      "observations_sha256": "0f13482e80159d27cd5618bb005343e9d15c237244f324410416d566a8364633",
+      "normalized_video_sha256": "19de788cbb4754779dd74a72cf566d4d00cb64bcd64dd64eb02c0b9e04bfd978",
+      "archive_sha256": "0f125385844c9a65de1d5bd4471cfa3d13b6499bc6b1e8eecf7db9dca2d7ed2a"
+    },
+    {
+      "video": "49.23",
+      "observations_sha256": "b7d6abf85ec8d613fe93de86aebcbb0a3e22b0f7b364e65e7ff3e8977e17ee2f",
+      "normalized_video_sha256": "6041a82debb54e49f2ef2f843d46841197e02b75654df2a9b33e207fe0847b85",
+      "archive_sha256": "e7c0e999415913f242002cb1403a0511a5c7e1b80e8bd2d7d9daf2e4f777283b"
+    },
+    {
+      "video": "49.33",
+      "observations_sha256": "2ba109aa00e1ee39a23db837d09a0ced3fe1cb5845a756d84da492f84ca10d69",
+      "normalized_video_sha256": "97d267f4986b83a60a16ee22b4204721dc02d53bbd9378a56b2095da893a408f",
+      "archive_sha256": "9ee0b53b9d4ee797d88d7b1f84976fb78e92b9db21de814e94ae635eee623867"
+    },
+    {
+      "video": "49.43",
+      "observations_sha256": "05022c6bfbf0a7b4dae3efa370d29550041d380ab4169681150af4afd0eea380",
+      "normalized_video_sha256": "d4377677336983675302e6cecab584f6447feaa26f9fd270fde383188bea7ede",
+      "archive_sha256": "00f4400fafd23fa1c37e9cd5911d3096e056d61f305db322d662fa9973c13ddc"
+    },
+    {
+      "video": "49.53",
+      "observations_sha256": "cb8cd99677ad5ef4850eaaf277ef8fbf29bc66e4e7db4d6a51fa11086087283b",
+      "normalized_video_sha256": "934f7c58214dbd7dd04292aec327971726814c0510fa54b6a62667ca4d273c58",
+      "archive_sha256": "5f8da424345bc777fc46975fefd067d28dcc219dae6d8c2491468f62ead98688"
+    },
+    {
+      "video": "50.03",
+      "observations_sha256": "db5713ca9e11d40f546b308383778dc989d375589d3579cca6862be1fc0c1357",
+      "normalized_video_sha256": "01b09ee089971d9482c17e9f80514eeaee7af6909a99db0d1806704674dfea32",
+      "archive_sha256": "ce755d59f20cbbaf5c62c19d1a0d30a08503f5e8be5946de21e3d475ab88edd5"
+    }
+  ],
+  "subsets_analyzed": 511,
+  "fixed_training_rule": "Original cached all_score>0 only, no new masking/quality threshold, no heldout colors used",
+  "heldout_rule": "Every 25th frame excluded from selection; sampled every 5 frames",
+  "by_video_count": [
+    {
+      "k": 1,
+      "subsets": 9,
+      "face_fraction": {
+        "min": 0.8627488203069914,
+        "median": 0.8978955361501328,
+        "max": 0.9145468351684114
+      },
+      "uv_support_proxy_fraction": {
+        "min": 0.8882870881563548,
+        "median": 0.938548606544835,
+        "max": 0.9644582604452274
+      },
+      "relative_to_9clip_face_support": {
+        "min": 0.9043950420741415,
+        "median": 0.9412383443256765,
+        "max": 0.9586934273368206
+      },
+      "relative_to_9clip_uv_proxy_support": {
+        "min": 0.8984046784457359,
+        "median": 0.9492386755487635,
+        "max": 0.9754434404174442
+      }
+    },
+    {
+      "k": 2,
+      "subsets": 36,
+      "face_fraction": {
+        "min": 0.9023159950100341,
+        "median": 0.9263844443239139,
+        "max": 0.932526983782611
+      },
+      "uv_support_proxy_fraction": {
+        "min": 0.9308635638044903,
+        "median": 0.9711214481264139,
+        "max": 0.9802364676252745
+      },
+      "relative_to_9clip_face_support": {
+        "min": 0.945872185581078,
+        "median": 0.97110245622015,
+        "max": 0.9775415055719809
+      },
+      "relative_to_9clip_uv_proxy_support": {
+        "min": 0.9414661001685326,
+        "median": 0.9821825218089844,
+        "max": 0.9914013613835827
+      }
+    },
+    {
+      "k": 3,
+      "subsets": 84,
+      "face_fraction": {
+        "min": 0.9150892227585833,
+        "median": 0.935021966697402,
+        "max": 0.9415577371589738
+      },
+      "uv_support_proxy_fraction": {
+        "min": 0.9458989326286449,
+        "median": 0.9797232784966647,
+        "max": 0.9838343485974468
+      },
+      "relative_to_9clip_face_support": {
+        "min": 0.9592619968160109,
+        "median": 0.9801569251762565,
+        "max": 0.9870081874005003
+      },
+      "relative_to_9clip_uv_proxy_support": {
+        "min": 0.9566727218496078,
+        "median": 0.9908823270305929,
+        "max": 0.995040222221467
+      }
+    },
+    {
+      "k": 4,
+      "subsets": 126,
+      "face_fraction": {
+        "min": 0.9249335575202039,
+        "median": 0.9400390519064924,
+        "max": 0.9468731355426588
+      },
+      "uv_support_proxy_fraction": {
+        "min": 0.9556232915234751,
+        "median": 0.9833948229801207,
+        "max": 0.9858059460152434
+      },
+      "relative_to_9clip_face_support": {
+        "min": 0.9695815328633159,
+        "median": 0.9854161928587672,
+        "max": 0.9925801682965658
+      },
+      "relative_to_9clip_uv_proxy_support": {
+        "min": 0.9665078411961395,
+        "median": 0.9945956904071838,
+        "max": 0.997034276134641
+      }
+    },
+    {
+      "k": 5,
+      "subsets": 126,
+      "face_fraction": {
+        "min": 0.937110158919564,
+        "median": 0.9439442425557303,
+        "max": 0.950154580463199
+      },
+      "uv_support_proxy_fraction": {
+        "min": 0.9774098565396656,
+        "median": 0.9851233308106813,
+        "max": 0.9870060150780161
+      },
+      "relative_to_9clip_face_support": {
+        "min": 0.9823459176711394,
+        "median": 0.9895098931089379,
+        "max": 0.9960200136456675
+      },
+      "relative_to_9clip_uv_proxy_support": {
+        "min": 0.9885425551965782,
+        "median": 0.9963438859426257,
+        "max": 0.9982480139845187
+      }
+    },
+    {
+      "k": 6,
+      "subsets": 84,
+      "face_fraction": {
+        "min": 0.9419374084720942,
+        "median": 0.9469951727504475,
+        "max": 0.9517546238542062
+      },
+      "uv_support_proxy_fraction": {
+        "min": 0.9831636229420742,
+        "median": 0.9863890508624575,
+        "max": 0.9880577232443788
+      },
+      "relative_to_9clip_face_support": {
+        "min": 0.9874061860359336,
+        "median": 0.9927080964293837,
+        "max": 0.9976972936092791
+      },
+      "relative_to_9clip_uv_proxy_support": {
+        "min": 0.9943618570006114,
+        "median": 0.9976240225462981,
+        "max": 0.9993117011073168
+      }
+    },
+    {
+      "k": 7,
+      "subsets": 36,
+      "face_fraction": {
+        "min": 0.9458697185008407,
+        "median": 0.9494901556652384,
+        "max": 0.9526766827574985
+      },
+      "uv_support_proxy_fraction": {
+        "min": 0.9859853231269308,
+        "median": 0.9874297741192428,
+        "max": 0.9883957999909019
+      },
+      "relative_to_9clip_face_support": {
+        "min": 0.9915283147600636,
+        "median": 0.9953235160336593,
+        "max": 0.9986638617239026
+      },
+      "relative_to_9clip_uv_proxy_support": {
+        "min": 0.9972156963517022,
+        "median": 0.9986765996413944,
+        "max": 0.999653628548118
+      }
+    },
+    {
+      "k": 8,
+      "subsets": 9,
+      "face_fraction": {
+        "min": 0.9495579541140099,
+        "median": 0.9519444595107663,
+        "max": 0.9533817866247221
+      },
+      "uv_support_proxy_fraction": {
+        "min": 0.9876578725357616,
+        "median": 0.9880367872990666,
+        "max": 0.9886178243985956
+      },
+      "relative_to_9clip_face_support": {
+        "min": 0.9953945872185581,
+        "median": 0.9978962929269957,
+        "max": 0.9994030020468502
+      },
+      "relative_to_9clip_uv_proxy_support": {
+        "min": 0.9989072960989687,
+        "median": 0.9992905267015791,
+        "max": 0.9998781818139042
+      }
+    },
+    {
+      "k": 9,
+      "subsets": 1,
+      "face_fraction": {
+        "min": 0.9539512935944026,
+        "median": 0.9539512935944026,
+        "max": 0.9539512935944026
+      },
+      "uv_support_proxy_fraction": {
+        "min": 0.988738270701256,
+        "median": 0.988738270701256,
+        "max": 0.988738270701256
+      },
+      "relative_to_9clip_face_support": {
+        "min": 1.0,
+        "median": 1.0,
+        "max": 1.0
+      },
+      "relative_to_9clip_uv_proxy_support": {
+        "min": 1.0,
+        "median": 1.0,
+        "max": 1.0
+      }
+    }
+  ],
+  "current_all_clip_support": {
+    "bitmask": 511,
+    "videos": 9,
+    "clips": [
+      "48.43",
+      "48.53",
+      "49.03",
+      "49.13",
+      "49.23",
+      "49.33",
+      "49.43",
+      "49.53",
+      "50.03"
+    ],
+    "supported_faces": 35176,
+    "face_support_fraction_of_all_mesh_faces": 0.9539512935944026,
+    "supported_uv_proxy_texels": 3825373,
+    "uv_support_proxy_fraction_of_uv_surface": 0.988738270701256,
+    "fraction_of_9clip_face_support": 1.0,
+    "fraction_of_9clip_uv_proxy_support": 1.0
+  },
+  "recommended_minimum_99pct": {
+    "bitmask": 306,
+    "videos": 4,
+    "clips": [
+      "48.53",
+      "49.23",
+      "49.33",
+      "50.03"
+    ],
+    "supported_faces": 34915,
+    "face_support_fraction_of_all_mesh_faces": 0.9468731355426588,
+    "supported_uv_proxy_texels": 3812734,
+    "uv_support_proxy_fraction_of_uv_surface": 0.9854714878271694,
+    "fraction_of_9clip_face_support": 0.9925801682965658,
+    "fraction_of_9clip_uv_proxy_support": 0.996696008467671
+  },
+  "repetition": {
+    "faces_supported_by_n_clips": [
+      1698,
+      686,
+      278,
+      340,
+      385,
+      637,
+      783,
+      1040,
+      1634,
+      29393
+    ],
+    "supported_faces_seen_in_at_least_5_clips_fraction": 0.9519843074823744,
+    "sum_individual_face_support_divided_by_union": 8.431146236070047,
+    "sum_individual_uv_proxy_support_divided_by_union": 8.475493239482791
+  },
+  "actual_atlas_measurements": [
+    {
+      "label": "first_clip_baseline",
+      "report_path": "/Users/krum5539/Documents/Tennis-Vision/output/multivideo_texture/baseline_independent/texture_report.json",
+      "report_sha256": "601be4f5e4e2a2bd2b036dbb6bf7bc9a6a6f64722b0acf3b88bab2e1a906ae1c",
+      "atlas_observed_texel_fraction": 0.8760599791571033,
+      "source": "previous actual atlas, not rerendered for this support analysis"
+    },
+    {
+      "label": "old_nine_clip_atlas",
+      "report_path": "/Users/krum5539/Documents/Tennis-Vision/output/multivideo_texture/fusion_independent/texture_report.json",
+      "report_sha256": "d7d250d9fc282e56445ecbc58326ff0905204e653e342f9f5a2eb88d3271e114",
+      "atlas_observed_texel_fraction": 0.9673070998184518,
+      "source": "previous actual atlas, not rerendered for this support analysis"
+    },
+    {
+      "label": "consistency_candidate",
+      "report_path": "/Users/krum5539/Documents/Tennis-Vision/output/multiagent_gpu/texture_quality/consistency_v1/texture_report.json",
+      "report_sha256": "a542b984fcbfbaf24c77df0b79112327f0d368ee19677abee93ceae8f68baef6",
+      "atlas_observed_texel_fraction": 0.96638410894549,
+      "source": "previous actual atlas, not rerendered for this support analysis"
+    }
+  ],
+  "existing_capture": {
+    "clips": 9,
+    "distributed_frames_reviewed": 36,
+    "same_fixed_camera_visual_evidence": true,
+    "same_outfit_visual_evidence": true,
+    "first_creation_time_utc": "2026-09-30T02:48:43.000000Z",
+    "last_creation_time_utc": "2026-09-30T02:50:03.000000Z",
+    "creation_start_intervals_s": [
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0
+    ],
+    "continuity_interpretation": "Metadata starts every 10s with approximately 10s durations and repeated background; supports one near-continuous fixed-camera session, not proof of exact no-gap synchronization.",
+    "independent_camera_views_count_verified": 1,
+    "mirror_view": "Additional virtual viewpoint in the same frame, per-clip unmeasured calibration; not a new physical camera clip."
+  },
+  "verified_stroke_labels": {
+    "48.43": "unknown",
+    "48.53": "unknown",
+    "49.03": "unknown",
+    "49.13": "unknown",
+    "49.23": "unknown",
+    "49.33": "unknown",
+    "49.43": "unknown",
+    "49.53": "unknown",
+    "50.03": "unknown"
+  },
+  "capture_budget": {
+    "initial_target_roles": 6,
+    "forehand_views": 2,
+    "backhand_views": 2,
+    "body_turn": 1,
+    "grip_face_closeup": 1,
+    "reuse_existing_verified_clips": true,
+    "hard_maximum": null
+  },
+  "proxy_limits": "A face-center training visibility union weighted by MHR UV raster area is an optimistic support proxy. It is not the actual sampled texel coverage, calibrated fit accuracy, or body completeness. Center-visible faces may have occluded/invalid texels.",
+  "mhr_progress_snapshot": {
+    "ledger_sha256": "4d5fe191e8a572410752283179953b28c965e282b9aa67ac00d6b280b60aa400",
+    "accepted_joint_fit_runs": 0,
+    "runs": [
+      {
+        "run_id": "local-a2953ae370fc7bd18d998634d0388676",
+        "event_ids": [
+          "5979a1fd6aa7f269c2e95ffe6f0de6017508ec2590848c484fe03997835e9d2f",
+          "c540cfc58fdb0c68bce58cc7208b165e87b674e8dad96d3e6b6ab8ba8192d8f2"
+        ],
+        "event_kind": "joint_fit",
+        "latest_event_id": "c540cfc58fdb0c68bce58cc7208b165e87b674e8dad96d3e6b6ab8ba8192d8f2",
+        "latest_execution": "needs_input",
+        "latest_acceptance": "rejected"
+      },
+      {
+        "run_id": "2dd9765f493e420f9743637a1469db42",
+        "event_ids": [
+          "bfb92961305f80f5ea66fdd4ae7cb1e798819b33d59a6524a19648839d43119a",
+          "26f3569e1cb818e8360739b195aaa8c050740d4fb2144da167ce8a98f2031d90"
+        ],
+        "event_kind": "joint_fit",
+        "latest_event_id": "26f3569e1cb818e8360739b195aaa8c050740d4fb2144da167ce8a98f2031d90",
+        "latest_execution": "failed",
+        "latest_acceptance": "rejected"
+      },
+      {
+        "run_id": "8ba0f427d4a64e778caa77a9504e8260",
+        "event_ids": [
+          "68952bd884a071395e3a9a39bc9484c4587ae87a6b09395b43de5308b6e97dd2",
+          "484992635c7a76a95cc5b9856ed1dcfd5d02673de0d47cae84966d04b609a7c4"
+        ],
+        "event_kind": "joint_fit",
+        "latest_event_id": "484992635c7a76a95cc5b9856ed1dcfd5d02673de0d47cae84966d04b609a7c4",
+        "latest_execution": "completed",
+        "latest_acceptance": "rejected"
+      },
+      {
+        "run_id": "c3d636e734ab4060ae7bb649ced2281e",
+        "event_ids": [
+          "d346611b03cd6c8bfac5656e8a25e266d4b6f937a9c5ae6c5115edd4d7eacba6",
+          "032da4646e45dc70f59d291c2bd54183867d9f58c9d868705e13e0fc43bfec59"
+        ],
+        "event_kind": "native_replay_audit",
+        "latest_event_id": "032da4646e45dc70f59d291c2bd54183867d9f58c9d868705e13e0fc43bfec59",
+        "latest_execution": "completed",
+        "latest_acceptance": "not_applicable"
+      }
+    ]
+  }
+}

@@ -86,6 +86,8 @@ python3 -B viewer/video_import/publish_texture_review.py \
 
 ## 后续重点
 
+2026-10-01 后续已补自动 MHR 分项进度台账、历史失败/候选回填及九段视频的 511 子集分析，见 [MHR_FIT_PROGRESS.md](MHR_FIT_PROGRESS.md)。精选四段能保留九段约 99% 的观察支持，但共享身份、相机/尺度与真实手部接触仍待完成，不能据此记成完全拟合。
+
 1. 使用 SAM2 内部局部清晰度和有效投影采样分辨率，减少球网/背景对选帧评分的影响；建立新固定对照协议后再改观测门槛。
 2. 对手部/肩颈/衣物腰线补可靠对应，做局部几何及遮挡约束。原生回放正确不能替代这一步。
 3. 握拍继续使用 [tennis-racket-fitting skill](../../skills/tennis-racket-fitting/SKILL.md)；本轮没有完成真实握柄棱位、网格表面接触或通过全身重拟合验收。

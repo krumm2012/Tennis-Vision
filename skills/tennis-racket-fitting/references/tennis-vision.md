@@ -12,6 +12,8 @@ Repository: `/Users/krum5539/Documents/Tennis-Vision`; commands run from its roo
 - `fit_dataset_grip.py`: rigid fit, hand evidence, direction and quality gates. Default and directional geometry are separate assets.
 - `grip_contact_audit.py`: palm-anchor gap, raw hand/shaft conflict, joint-cylinder proxy.
 - `refit_readiness.py`, `refit_fullbody.py`, `run_fullbody_refit.py`: private native-MHR optimization; assumptions/automatic observations require explicit provisional flags.
+- `mhr_fit_progress.py`: automatically records every runner attempt, execution, acceptance, source/report hashes and unfinished stages; `completion.json` plus immutable content-addressed events. Backfill with `--output <fit-directory>`. Native replay audits are separate events and never count as accepted joint fits. See `viewer/video_import/MHR_FIT_PROGRESS.md` for implementation/capture guidance.
+- `analyze_video_sufficiency.py`: fixed-training-observation subset unions and UV-area support proxies; video-count saturation is not fit accuracy. The current nine files are consecutive fixed-camera practice, without verified backhand labels. Target missing views and clear hand/handle evidence before more repeated clips.
 - `audit_racket_motion.py`, `audit_racket_direction.py`: motion and observation metrics.
 - `audit_native_batch.py`: actual CUDA replay of existing real/mirror native archives; preserves absent mirror frames and records model/source hashes. `audit_multivideo_evidence.py` independently checks normalized timeline, masks and raw projection. See `viewer/video_import/MULTIAGENT_GPU_ITERATION.md`; replay consistency does not prove grip or pixel accuracy.
 
