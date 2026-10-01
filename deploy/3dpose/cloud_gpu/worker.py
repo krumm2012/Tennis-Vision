@@ -14,12 +14,31 @@ def execute(root,job):
     try:
         if manifest['source_sha256']!=request['source_sha256']:raise ValueError('Input hash mismatch')
         env={**os.environ,**cfg['env'],'VIEWER_REQUIRE_CUDA':'1'}
+        if request.get('kind')=='fullbody_refit':
+            previous=folder(root,request['base_job_id']);prior=json.loads((previous/'run_manifest.json').read_text());archive=previous/'work/reconstruction.npz'
+            if prior['status']!='ready' or prior['source_sha256']!=manifest['source_sha256'] or sha256(archive)!=request['archive_sha256']:raise ValueError('Refit parent identity/hash mismatch')
+            args=[sys.executable,str(Path(__file__).with_name('refit_fullbody.py')),'--result',str(base/'refit_input'),'--archive',str(archive),'--output',str(base/'refit_output')]
+            if request.get('allow_assumed'):args.append('--allow-assumed')
+            if request.get('allow_automatic'):args.append('--allow-automatic')
+            subprocess.run(args,env=env,check=True,timeout=6800)
+            readiness=json.loads((base/'refit_output/readiness.json').read_text());manifest.update(kind='fullbody_refit',readiness=readiness)
+            if not readiness['ready']:
+                manifest['status']='needs_input';return False
+            report=json.loads((base/'refit_output/refit_report.json').read_text());manifest.update(refit=report,publication_status='needs_review',artifact_sha256={'mhr_refit_candidate.npz':sha256(base/'refit_output/mhr_refit_candidate.npz')},status='ready')
+            return True
         parent=request.get('base_job_id')
         if parent:
             previous=folder(root,parent);prior=json.loads((previous/'run_manifest.json').read_text())
             if prior['status']!='ready' or prior['source_sha256']!=manifest['source_sha256']:raise ValueError('Reuse requires same video hash and a ready cloud job')
             if sha256(previous/'work/reconstruction.npz')!=prior['artifact_sha256']['reconstruction.npz']:raise ValueError('Parent artifact hash mismatch')
-            (base/'work').mkdir(exist_ok=True);shutil.copy2(previous/'work/reconstruction.npz',base/'work/reconstruction.npz');write(base/'work/inference_manifest.json',{**prior['inference'],'primary_reused_from_job':parent,'reuse_source_sha256':manifest['source_sha256']})
+            import numpy as np
+            from mhr_parameters import available
+            with np.load(previous/'work/reconstruction.npz',allow_pickle=False) as archive:native=available(archive,len(archive['vertices']))
+            if native:
+                (base/'work').mkdir(exist_ok=True);shutil.copy2(previous/'work/reconstruction.npz',base/'work/reconstruction.npz');write(base/'work/inference_manifest.json',{**prior['inference'],'primary_reused_from_job':parent,'reuse_source_sha256':manifest['source_sha256']})
+            else:
+                subprocess.run([sys.executable,str(Path(__file__).with_name('generate_sam.py')),'--video',str(base/'source.mp4'),'--output',str(base/'work')],env=env,check=True,timeout=6800)
+                manifest['primary_reinferred_for_native_mhr']=parent
         else:
             subprocess.run([sys.executable,str(Path(__file__).with_name('generate_sam.py')),'--video',str(base/'source.mp4'),'--output',str(base/'work')],env=env,check=True,timeout=6800)
         if env.get('VIEWER_MULTIVIEW')=='1':

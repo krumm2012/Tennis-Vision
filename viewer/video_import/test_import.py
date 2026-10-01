@@ -78,4 +78,12 @@ class ImportTests(unittest.TestCase):
   self.assertEqual(status,400);self.assertEqual((out/'racket_poses.json').read_text(),'original-poses');self.assertEqual((out/'racket_landmarks.json').read_text(),'original-review')
   (out/'private.npz').write_bytes(b'private');status,_=self.request('GET','/datasets/'+item['id']+'/result/private.npz');self.assertEqual(status,404)
 
+ def test_size_save_keeps_pose_and_rejects_other_video_without_overwriting(self):
+  status,body=self.request('POST','/api/videos?name=dimensions.mp4',self.video.read_bytes());item=json.loads(body);out=self.library.folder(item['id'])/'result';out.mkdir();self.library.update(item['id'],status='ready')
+  meta={'video_sha256':'same','image_size':[64,48],'fps':25,'frames':3};(out/'mesh_meta.json').write_text(json.dumps(meta));(out/'racket_poses.json').write_text('unchanged')
+  value={**meta,'dimensions_cm':{'length':68.5,'head_width':26,'head_height':34.8},'measured':False}
+  endpoint='/api/videos/'+item['id']+'/racket-dimensions';status,body=self.request('POST',endpoint,json.dumps(value));self.assertEqual(status,200);self.assertFalse(json.loads(body)['size_ready'])
+  before=(out/'racket_dimensions.json').read_bytes();value['video_sha256']='other';status,_=self.request('POST',endpoint,json.dumps(value));self.assertEqual(status,400)
+  self.assertEqual((out/'racket_dimensions.json').read_bytes(),before);self.assertEqual((out/'racket_poses.json').read_text(),'unchanged')
+
 if __name__=='__main__':unittest.main()

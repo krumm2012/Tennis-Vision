@@ -97,6 +97,8 @@ class Library:
                 self.update(ident,message='正在修正掌内握拍与拍面角度')
                 from racket_keypoints import build as build_keypoints
                 build_keypoints(folder,work/'result')
+                from racket_review_frames import build as select_review_frames
+                select_review_frames(folder,work/'result')
                 with (run/'grip.log').open('w') as log:
                     subprocess.run([sys.executable,str(REPO/'viewer/video_import/fit_dataset_grip.py'),'--dataset',str(folder),'--result',str(work/'result')],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1800)
             remote=work/'remote_manifest.json'
@@ -196,7 +198,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.allowed(): return self.json({'error':'仅允许本地访问'},403)
         route=urlsplit(self.path)
         try:
-            edit=re.fullmatch(r'/api/videos/([0-9a-f]{32})/(annotations|calibration|racket-landmarks)',route.path)
+            edit=re.fullmatch(r'/api/videos/([0-9a-f]{32})/(annotations|calibration|racket-landmarks|racket-dimensions)',route.path)
             if edit:
                 ident,action=edit.groups();folder=self.server.library.folder(ident)
                 if self.server.library.read(ident)['status']!='ready':raise ValueError('请先完成视频生成')
@@ -204,6 +206,16 @@ class Handler(SimpleHTTPRequestHandler):
                 if not 0<size<=(1048576 if action=='racket-landmarks' else 65536):raise ValueError('标记 JSON 大小无效')
                 value=json.loads(self.rfile.read(size));meta=json.loads((folder/'result/mesh_meta.json').read_text())
                 if value.get('video_sha256')!=meta['video_sha256'] or value.get('image_size')!=meta['image_size']:raise ValueError('标记属于其他视频')
+                if action=='racket-dimensions':
+                    from racket_calibration import validate as validate_dimensions
+                    reviewed=validate_dimensions(value,meta)
+                    with self.server.library.lock:
+                        write_record(folder/'result/racket_dimensions.json',reviewed)
+                        attempt=self.server.library.read(ident).get('attempt',0);archive=folder/'attempts'/f'{attempt:04d}'/'work/reconstruction.npz'
+                        if archive.exists():
+                            from refit_readiness import assess
+                            write_record(folder/'result/fullbody_refit_readiness.json',assess(folder/'result',archive,True,True))
+                    return self.json({'saved':True,'size_ready':reviewed['size_ready'],'fit_pending':True})
                 if action=='racket-landmarks':
                     from racket_landmarks import validate
                     from fit_dataset_grip import fit_dataset
@@ -216,9 +228,13 @@ class Handler(SimpleHTTPRequestHandler):
                             else:shutil.copy2(source,destination)
                         shutil.copytree(folder/'result',stage,copy_function=clone);write_record(stage/'racket_landmarks.json',reviewed)
                         fit_dataset(folder,stage)
-                        changed=['racket_landmarks.json','racket_poses.json','wilson_grasp_calibration.json','wilson_model.json','grip_fit_manifest.json','racket_poses_directional.json','racket_poses_reference.json','racket_quality_gate.json']
+                        changed=['racket_landmarks.json','racket_poses.json','wilson_grasp_calibration.json','wilson_model.json','grip_fit_manifest.json','racket_poses_directional.json','racket_poses_reference.json','racket_quality_gate.json','wilson_mesh_directional.bin','wilson_mesh_reference.bin']
                         for name in changed:
                             if (stage/name).exists():(stage/name).replace(folder/'result'/name)
+                    attempt=self.server.library.read(ident).get('attempt',0);archive=folder/'attempts'/f'{attempt:04d}'/'work/reconstruction.npz'
+                    if archive.exists():
+                        from refit_readiness import assess
+                        write_record(folder/'result/fullbody_refit_readiness.json',assess(folder/'result',archive,True,True))
                     return self.json({'saved':True,'frames':len(reviewed['frames']),'direction_status':json.loads((folder/'result/racket_quality_gate.json').read_text())['status'] if (folder/'result/racket_quality_gate.json').exists() else 'provisional'})
                 from mirror_calibration import corners,apply
                 if action=='calibration':

@@ -7,6 +7,7 @@ import argparse,json,os,sys,time,gc
 from pathlib import Path
 import cv2,numpy as np
 from run_records import write,sha256,now
+from mhr_parameters import capture,stack
 
 def iou(a,b):
     a=np.asarray(a);b=np.asarray(b);inter=np.maximum(np.minimum(a[2:],b[2:])-np.maximum(a[:2],b[:2]),0).prod()
@@ -50,7 +51,7 @@ def run(video,output):
         sys.path.insert(0,os.environ['SAM3D_BODY_CODE'])
         from sam_3d_body import load_sam_3d_body,SAM3DBodyEstimator
         weights=Path(os.environ['SAM3D_WEIGHTS']);model,cfg=load_sam_3d_body(str(weights/'model.ckpt'),device='cuda',mhr_path=str(weights/'assets/mhr_model.pt'));model.eval();est=SAM3DBodyEstimator(model,cfg)
-        mv=np.zeros_like(data['vertices']);mj=np.zeros_like(data['joints']);mr=np.zeros_like(data['source_roots']);mf=np.zeros_like(data['focal']);muv=np.zeros_like(data['joints2d']);cap=cv2.VideoCapture(str(video))
+        mv=np.zeros_like(data['vertices']);mj=np.zeros_like(data['joints']);mr=np.zeros_like(data['source_roots']);mf=np.zeros_like(data['focal']);muv=np.zeros_like(data['joints2d']);cap=cv2.VideoCapture(str(video));native=[None]*count
         for frame in range(count):
             ok,image=cap.read()
             if not ok:raise ValueError('镜中 SAM 输入帧缺失')
@@ -58,10 +59,10 @@ def run(video,output):
             box=np.asarray(rows[frame]['mirror_box']);flipped_box=box.copy();flipped_box[[0,2]]=size[0]-box[[2,0]]
             with torch.no_grad():result=est.process_one_image(cv2.cvtColor(cv2.flip(image,1),cv2.COLOR_BGR2RGB),bboxes=flipped_box[None].astype(np.float32),inference_type='full')
             if not result:raise ValueError('镜中 SAM 未返回网格')
-            person=result[0];mv[frame]=person['pred_vertices'];mj[frame]=person['pred_keypoints_3d'];mr[frame]=np.asarray(person['pred_cam_t']).reshape(3);mf[frame]=float(np.asarray(person['focal_length']).reshape(-1)[0]);muv[frame]=person['pred_keypoints_2d']
+            person=result[0];native[frame]=capture(person);mv[frame]=person['pred_vertices'];mj[frame]=person['pred_keypoints_3d'];mr[frame]=np.asarray(person['pred_cam_t']).reshape(3);mf[frame]=float(np.asarray(person['focal_length']).reshape(-1)[0]);muv[frame]=person['pred_keypoints_2d']
             mv[frame,:,0]*=-1;mj[frame,:,0]*=-1;mr[frame,0]*=-1;muv[frame,:,0]=size[0]-muv[frame,:,0]
             if frame%25==24 or frame==count-1:print(f'Mirror SAM3D {frame+1}/{count}',flush=True)
-        cap.release();data.update(mirror_vertices=mv,mirror_joints=mj,mirror_roots=mr,mirror_focal=mf,mirror_joints2d=muv)
+        cap.release();data.update(mirror_vertices=mv,mirror_joints=mj,mirror_roots=mr,mirror_focal=mf,mirror_joints2d=muv);data.update(stack(native,'mirror_'))
         del est,model;gc.collect();torch.cuda.empty_cache()
     # Fixed crop derived from this clip's tracked boxes gives both people useful encoder pixels.
     all_boxes=np.array([box for r in rows for box in [r['real_box'],r['mirror_box']] if box is not None]);lo=all_boxes[:,:2].min(0);hi=all_boxes[:,2:].max(0);margin=np.maximum((hi-lo)*.12,20);lo=np.maximum(0,np.floor(lo-margin)).astype(int);hi=np.minimum(size,np.ceil(hi+margin)).astype(int)
@@ -101,7 +102,7 @@ def run(video,output):
     if any(r['real_area']==0 for r in reports):raise ValueError('SAM2 真人跟踪丢失')
     data['masks']=real_masks;data['masks_mirror_sam2']=mirror_masks
     np.savez_compressed(out/'reconstruction.npz',**data)
-    report={'source_sha256':sha256(video),'frames':count,'image_size':size.tolist(),'fps':fps,'mirror_available':mirror_found,'mirror_sam3d_frames':int(data['mirror_valid'].sum()),'mirror_sam3d_method':'independent inference on horizontal-flipped image; x restored to original virtual camera; same anatomical MHR IDs','sam2_model':'SAM2.1_hiera_small','sam2_checkpoint_sha256':sha256(checkpoint),'sam2_crop':[*lo.tolist(),*hi.tolist()],'sam2_seeds':seeds,'sam2_mask_size':[mask_width,mask_height],'sam2_objects':[1,2] if mirror_found else [1],'tracking':rows,'mask_quality':reports,'seconds':time.monotonic()-started,'finished_at':now(),'sam2_real_iou_median':float(np.median([r['real_iou'] for r in reports])),'sam2_mirror_iou_median':float(np.median([r['mirror_iou'] for r in reports]))}
+    report={'source_sha256':sha256(video),'frames':count,'image_size':size.tolist(),'fps':fps,'mirror_available':mirror_found,'mirror_sam3d_frames':int(data['mirror_valid'].sum()),'mirror_mhr_parameters_available':'mirror_mhr_model_params' in data,'mirror_sam3d_method':'independent inference on horizontal-flipped image; x restored to original virtual camera; same anatomical MHR IDs','sam2_model':'SAM2.1_hiera_small','sam2_checkpoint_sha256':sha256(checkpoint),'sam2_crop':[*lo.tolist(),*hi.tolist()],'sam2_seeds':seeds,'sam2_mask_size':[mask_width,mask_height],'sam2_objects':[1,2] if mirror_found else [1],'tracking':rows,'mask_quality':reports,'seconds':time.monotonic()-started,'finished_at':now(),'sam2_real_iou_median':float(np.median([r['real_iou'] for r in reports])),'sam2_mirror_iou_median':float(np.median([r['mirror_iou'] for r in reports]))}
     write(out/'multiview_manifest.json',report)
     for file in images.glob('*.jpg'):file.unlink()
     images.rmdir();print(json.dumps({k:v for k,v in report.items() if k not in ['tracking','mask_quality','sam2_seeds']}),flush=True)

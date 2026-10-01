@@ -53,6 +53,12 @@ def triangulate(real_uv,mirror_uv,focal,size,normal,distance):
     if min(depths)<=0 or point[2]<=.1 or angle<3 or gap>.08:return None
     return point,gap,angle
 
+def role_compatible(center, grip, other, scale):
+    if other is None:return True
+    own=np.linalg.norm(center-grip);opposite=np.linalg.norm(center-other)
+    return not (np.linalg.norm(grip-other)>50*scale and own>opposite*1.5)
+
+
 def build(folder,result=None):
     folder=Path(folder);out=Path(result) if result else folder/'result';meta=json.loads((out/'mesh_meta.json').read_text());poses=json.loads((out/'racket_poses.json').read_text())
     if poses['video_sha256']!=meta['video_sha256'] or len(poses['frames'])!=meta['frames']:raise ValueError('球拍引导与视频不一致')
@@ -69,19 +75,21 @@ def build(folder,result=None):
     for i,row in enumerate(poses['frames']):
         target=np.array(row.get('grip_target_camera_m',joints[i,41]+roots[i]));views={}
         real_uv=project(target[None],meta['focal'][i],size)[0]
+        mirror_uv=project((target-2*(target@np.array(geometry['normal_camera'])-geometry['distance_camera_m'])*np.array(geometry['normal_camera']))[None],meta['focal'][i],size)[0] if geometry else None
         for view in ['real','mirror']:
             if view=='mirror' and geometry is None:continue
             point=target if view=='real' else target-2*(target@np.array(geometry['normal_camera'])-geometry['distance_camera_m'])*np.array(geometry['normal_camera'])
             uv=project(point[None],meta['focal'][i],size)[0];options=[]
             if view=='real' and row.get('observed_polygon'):
                 e=extract(np.array(row['observed_polygon'])/scale,uv/scale,row.get('detection_confidence',.1))
-                if e:options.append((2.,e))
+                if e and role_compatible(np.array(e['points']['head_center'])*scale,uv,mirror_uv,scale):options.append((2.,e))
             for source in candidates:
                 for c in source['frames'][i]['candidates']:
                     if c.get('view') and c['view']!=view:continue
                     e=extract(np.array(c['polygon'])/scale,uv/scale,c['confidence'])
                     if not e:continue
                     center=np.array(e['points']['head_center'])*scale
+                    if not role_compatible(center,uv,mirror_uv if view=='real' else real_uv,scale):continue
                     if view=='mirror' and np.linalg.norm(center-real_uv)<60*scale:continue
                     distance=np.linalg.norm(center-uv)/scale
                     if distance>150:continue

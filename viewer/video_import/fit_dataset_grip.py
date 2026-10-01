@@ -21,7 +21,11 @@ def fit_dataset(folder,result=None):
     read=lambda n:json.loads((root/n).read_text())
     if (root/'racket_keypoints.json').exists() and not (root/'racket_poses_reference.json').exists():
         published=read('racket_poses.json')
-        if all(r.get('status')=='fitted' and 'grip_target_camera_m' in r for r in published['frames']):shutil.copy2(root/'racket_poses.json',root/'racket_poses_reference.json')
+        if all(r.get('status')=='fitted' and 'grip_target_camera_m' in r for r in published['frames']):
+            if published['model'].get('asset_file')=='wilson_mesh_directional.bin':
+                shutil.copy2(root/'wilson_mesh_directional.bin',root/'wilson_mesh_reference.bin');published['model']['asset_file']='wilson_mesh_reference.bin'
+                write(root/'racket_poses_reference.json',published)
+            else:shutil.copy2(root/'racket_poses.json',root/'racket_poses_reference.json')
     baseline=root/'racket_poses_wrist.json'
     if not baseline.exists():shutil.copy2(root/'racket_poses.json',baseline)
     old=read('racket_poses_wrist.json');meta=read('mesh_meta.json');pixel_scale=meta['image_size'][0]/1280;size=(np.asarray(meta['image_size'])/pixel_scale).tolist()
@@ -58,11 +62,17 @@ def fit_dataset(folder,result=None):
     for i,f in enumerate(detections):
         r=old['frames'][i];f['selected']={'confidence':r.get('detection_confidence',0),'polygon':r['observed_polygon']} if r.get('observed_polygon') else None
     masks=[{'mask_valid':bool(r.get('observed_polygon')),'polygon':r.get('observed_polygon',[])} for r in old['frames']]
-    model=old['model']
+    base_model=old['model'];model=base_model
+    dimension_calibration=None
+    if (root/'racket_dimensions.json').exists():
+        from racket_calibration import validate,measured_model,resize_mesh
+        dimension_calibration=validate(read('racket_dimensions.json'),meta);model=measured_model(base_model,dimension_calibration)
+        if dimension_calibration['size_ready']:
+            template=np.fromfile(root/'wilson_mesh.bin',dtype='<f4');pending=root/'wilson_mesh_directional.pending.bin';resize_mesh(template,base_model,model).tofile(pending);pending.replace(root/'wilson_mesh_directional.bin')
     mirror_enabled=bool(meta.get('mirror_available')) and (root/'mirror_geometry.json').exists()
     mirror=read('mirror_geometry.json') if mirror_enabled else {'normal_camera':[0,0,1],'distance_camera_m':0}
     count=len(frames);ring=np.array(model['head_outline']);grip=np.array([0,model['grip_y_m'],0]);roots=np.array(meta['source_roots']);focals=np.array(meta['focal'])/pixel_scale;palms=[palm_frame(f['raw']) for f in frames];wrists=np.array([a[0] for a in palms])+roots;hands=np.array([a[1] for a in palms]);normal=np.array(mirror['normal_camera'],dtype=float);normal/=np.linalg.norm(normal);plane=mirror['distance_camera_m']
-    model=dict(model,grip_y_m=.045);grip=np.array([0.,.045,0.])
+    model=dict(model,grip_y_m=model.get('grip_y_m',.045) if dimension_calibration and dimension_calibration['size_ready'] else .045);grip=np.array([0.,model['grip_y_m'],0.])
     keypoints=read('racket_keypoints.json') if (root/'racket_keypoints.json').exists() else None
     if keypoints and (keypoints['video_sha256']!=meta['video_sha256'] or keypoints['image_size']!=meta['image_size'] or keypoints['fps']!=meta['fps'] or len(keypoints['frames'])!=count):raise ValueError('拍柄关键点与视频不一致')
     manual=read('racket_landmarks.json') if (root/'racket_landmarks.json').exists() else None
@@ -252,7 +262,7 @@ def fit_dataset(folder,result=None):
             if direction_error>25:reasons.append('shaft_image_conflict')
             if head_error>25:reasons.append('head_center_residual')
         if hand_weights[i]<1 and 'hand_axis_conflict' in reasons:reasons[reasons.index('hand_axis_conflict')]='unreliable_hand_prior_downweighted'
-    calibration={'keyframes_1based':[i+1 for i in keys],'selection':'automatic clear-candidate selection; not manual ground truth','palm_offset_m':offset.tolist(),'grip_local_m':grip.tolist(),'method':'per-frame MCP/PIP grasp corridor; directed shaft prior; butt 45mm below contact; silhouette fit','requires_manual_confirmation':True,'status':'provisional_anatomical_prior' if np.allclose(offset,anatomical) else 'provisional_image_calibration','dimensions_measured':False,'signed_face_orientation_verified':False}
+    calibration={'keyframes_1based':[i+1 for i in keys],'selection':'automatic clear-candidate selection; not manual ground truth','palm_offset_m':offset.tolist(),'grip_local_m':grip.tolist(),'method':'per-frame MCP/PIP grasp corridor; directed shaft prior; butt 45mm below contact; silhouette fit','requires_manual_confirmation':True,'status':'provisional_anatomical_prior' if np.allclose(offset,anatomical) else 'provisional_image_calibration','dimensions_measured':bool(model.get('dimensions_measured')),'grip_style':dimension_calibration['grip_style'] if dimension_calibration else 'unknown','physical_grip_bevel_verified':False,'signed_face_orientation_verified':False}
     for i,row in enumerate(rows):
         if not support[i]:
             row.update(status='missing_observation',quality='hidden')
@@ -261,7 +271,7 @@ def fit_dataset(folder,result=None):
         if observation_polygons[i] is not None:
             row['observed_polygon']=observation_polygons[i]
         row['face_angle_to_camera_deg']=float(np.degrees(np.arccos(np.clip(abs(rs[i,2,2]),0,1))))
-    out={**old,'model':model,'method':'wilson_anatomical_grip_so3_v4','grasp_calibration':calibration,'frames':rows,'summary':{'frames':count,'observed':sum(r['status']=='fitted' and r['quality']=='silhouette_fitted' for r in rows),'hidden':sum(r['status']!='fitted' for r in rows),'hand':old['summary'].get('hand','right'),'interpolated':sum(r['status']=='fitted' and r['quality']=='constrained_estimate' for r in rows),'constrained_estimate':sum(r['status']=='fitted' and r['quality']=='constrained_estimate' for r in rows),'mirror_observations':sum(e is not None for e in mirror_obs),'mono_plane_ambiguity':True,'model_dimensions_measured':False}}
+    out={**old,'model':model,'method':'wilson_anatomical_grip_so3_v4','grasp_calibration':calibration,'frames':rows,'summary':{'frames':count,'observed':sum(r['status']=='fitted' and r['quality']=='silhouette_fitted' for r in rows),'hidden':sum(r['status']!='fitted' for r in rows),'hand':old['summary'].get('hand','right'),'interpolated':sum(r['status']=='fitted' and r['quality']=='constrained_estimate' for r in rows),'constrained_estimate':sum(r['status']=='fitted' and r['quality']=='constrained_estimate' for r in rows),'mirror_observations':sum(e is not None for e in mirror_obs),'mono_plane_ambiguity':True,'model_dimensions_measured':bool(model.get('dimensions_measured'))}}
     out['summary'].update(motion_metrics(rs));out['stability']={'before':before_stability,'after':motion_metrics(rs),'method':'SO3 angular acceleration, confidence weighted; robust hand axes; .6s bracketed gap support','fps':meta['fps']}
     out['observation_resolution']=roi['original_size'] if roi else size
     visible=[r for r in rows if r['status']=='fitted']

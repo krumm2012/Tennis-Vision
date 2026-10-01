@@ -27,6 +27,7 @@ def main():
     if missing:raise RuntimeError('缺少模型配置：'+', '.join(missing))
     import cv2,numpy as np,torch
     from run_records import sha256,write,now
+    from mhr_parameters import capture,stack
     started=time.monotonic()
     if os.environ.get('VIEWER_REQUIRE_CUDA')=='1' and not torch.cuda.is_available():raise RuntimeError('云 Worker 必须提供 CUDA GPU')
     from ultralytics import YOLO
@@ -35,7 +36,7 @@ def main():
     weights=Path(os.environ['SAM3D_WEIGHTS']);device='cuda' if torch.cuda.is_available() else 'cpu'
     model,cfg=load_sam_3d_body(str(weights/'model.ckpt'),device=device,mhr_path=str(weights/'assets/mhr_model.pt'));model.eval();est=SAM3DBodyEstimator(model,cfg)
     segment=YOLO(os.environ['VIEWER_SEGMENTATION_WEIGHTS']);faces=np.load(os.environ['SAM3D_FACES'],allow_pickle=False) if os.environ.get('SAM3D_FACES') else np.asarray(est.faces)
-    cap=cv2.VideoCapture(str(args.video));vertices=[];roots=[];focals=[];masks=[];joints=[];joints2d=[];tracking=[];previous=None
+    cap=cv2.VideoCapture(str(args.video));vertices=[];roots=[];focals=[];masks=[];joints=[];joints2d=[];tracking=[];previous=None;native=[]
     try:
         while True:
             ok,image=cap.read()
@@ -50,7 +51,7 @@ def main():
             previous=boxes[index]
             with torch.no_grad():result=est.process_one_image(cv2.cvtColor(image,cv2.COLOR_BGR2RGB),bboxes=previous[None].astype(np.float32),inference_type='full')
             if not result:raise ValueError('SAM 未生成人体网格')
-            person=result[0];joints.append(np.asarray(person['pred_keypoints_3d'],dtype=np.float32));joints2d.append(np.asarray(person['pred_keypoints_2d'],dtype=np.float32));tracking.append({'frame':len(vertices),'bbox':previous.tolist(),'confidence':float(detection.boxes.conf[index])});vertices.append(np.asarray(person['pred_vertices'],dtype=np.float32));roots.append(np.asarray(person['pred_cam_t'],dtype=np.float32).reshape(3));focals.append(float(np.asarray(person['focal_length']).reshape(-1)[0]))
+            person=result[0];native.append(capture(person));joints.append(np.asarray(person['pred_keypoints_3d'],dtype=np.float32));joints2d.append(np.asarray(person['pred_keypoints_2d'],dtype=np.float32));tracking.append({'frame':len(vertices),'bbox':previous.tolist(),'confidence':float(detection.boxes.conf[index])});vertices.append(np.asarray(person['pred_vertices'],dtype=np.float32));roots.append(np.asarray(person['pred_cam_t'],dtype=np.float32).reshape(3));focals.append(float(np.asarray(person['focal_length']).reshape(-1)[0]))
             # Polygons are in original image coordinates; avoid resizing letterboxed masks.
             mask=np.zeros(image.shape[:2],np.uint8);polygon=detection.masks.xy[index].astype(np.int32)
             if len(polygon)<3:raise ValueError('人物遮罩为空')
@@ -59,7 +60,7 @@ def main():
     finally:cap.release()
     if not vertices:raise ValueError('视频没有可解码的画面')
     args.output.mkdir(parents=True,exist_ok=True)
-    np.savez_compressed(args.output/'reconstruction.npz',vertices=vertices,faces=faces,source_roots=roots,focal=focals,masks=masks,joints=joints,joints2d=joints2d)
-    write(args.output/'inference_manifest.json',{'schema_version':1,'source_sha256':sha256(args.video),'frames':len(vertices),'gpu_type':torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU','seconds':time.monotonic()-started,'checkpoint_sha256':sha256(weights/'model.ckpt'),'model_config_sha256':sha256(weights/'model_config.yaml'),'segmentation_sha256':sha256(os.environ['VIEWER_SEGMENTATION_WEIGHTS']),'tracking':tracking})
+    np.savez_compressed(args.output/'reconstruction.npz',vertices=vertices,faces=faces,source_roots=roots,focal=focals,masks=masks,joints=joints,joints2d=joints2d,video_sha256=np.array(sha256(args.video)),**stack(native))
+    write(args.output/'inference_manifest.json',{'schema_version':1,'source_sha256':sha256(args.video),'frames':len(vertices),'gpu_type':torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU','seconds':time.monotonic()-started,'checkpoint_sha256':sha256(weights/'model.ckpt'),'model_config_sha256':sha256(weights/'model_config.yaml'),'segmentation_sha256':sha256(os.environ['VIEWER_SEGMENTATION_WEIGHTS']),'tracking':tracking,'mhr_parameters_available':True,'mhr_parameter_layout':'136 native pose + 68 scales; 45 shape; 72 expression; internal centimetres'})
 
 if __name__=='__main__':main()
