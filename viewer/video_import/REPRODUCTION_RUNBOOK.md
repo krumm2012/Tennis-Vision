@@ -757,3 +757,26 @@ python3 viewer/video_import/run_fullbody_refit.py \
 默认 Viewer 的人体网格、球拍、最新合成纹理以及现场人工标记均与本轮执行前哈希一致。候选因运动门槛失败未进入发布用视觉验收，也未替换主 Viewer。未修改门槛让它通过。
 
 下一轮优先定位旋转加速度异常的具体区间与观测切换：区分真实挥拍转向、拍框对称解切换和自动观测跳变，再以观测置信度门控实际旋转的连续性；不应仅加大整段平滑。当前两帧保留集已用于本轮结果分析，后续最终验收还需新增未参与调参的标注帧。
+
+## v9 准备：抖动与观测切换审计（尚未执行 GPU 拟合）
+
+分析对象为 v8 归一化候选，使用 SciPy SO(3) 独立重算旋转步进和加速度。可复现命令：
+
+```sh
+python3 viewer/video_import/audit_racket_jitter.py \
+  --candidate output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v8/gpu-fit-normalized/mhr_refit_candidate.npz \
+  --observations output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v8/observations_snapshot.json \
+  --output output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v8/jitter_audit.json
+```
+
+结果：相邻拍面法线反向次数为 0，单帧旋转最大 36.9000°，不支持“瞬间 180° 拍面翻转”是当前主要原因；这不排除更缓慢的对称解漂移，也不证明真实物理拍面身份已识别。
+
+最大的 15 个加速度位置有 13 个位于观测边界：包括观测缺失/恢复、可见关键点集合变化、人工/自动来源交接。全段 247 个可评估中心中本来就有 176 个边界，因此 13/15 只是定位线索，不能单独证明切换导致抖动。最高的三个位置为界面第 183、106、116 帧，加速度约 14.4、14.2、11.9°/帧²。第 3 帧附近自动拍头的相邻中点残差约 40 canonical px，但前后也在变化，未将其自动判作错误点。
+
+新增保守门控 `gate_isolated_points`：只有中间帧及前后相邻帧都属于自动训练观测，前后端点距离小于 12 canonical px、中间与两侧均相差超过 12 px，才将该点权重乘以 0.1。不会插值/补点，不改人工标记，不读取保留帧或跨越人工帧来判断异常。正常连续快速移动不满足该门槛。
+
+本数据仅 1 点满足门槛：零基第 94 帧（界面 95 帧）的镜中 throat，中点残差 16.7064 canonical px。它并不覆盖大多数高抖动区间，不能声称该门控已解决整体抖动。下一步应检查高抖动区间的原画面、角色关联和可见部位交接，避免把真实挥拍或正确人工标记抹平。
+
+8 项相关测试通过（5 项目标/批次一致性，3 项观测测试，包含新门控对人工/保留帧隔离和快速运动保护）。v9 输入、代码和门控记录保存到 `iterations/grip_refit_v9/`；沿用 v8 冻结输入和验证集。云 SSH 再次返回 Connection closed，部署未成功，也未调度 v9 云 job。**尚无门控后 GPU 结果，未更新 Viewer，未新增已完成 MHR 拟合计数。** Graphify 仍因缺少模块未完成。
+
+恢复连接后：先部署当前版本，再用 `run_fullbody_refit.py --dataset .../iterations/grip_refit_v9/staged --native-output .../iterations/grip_refit_v6/native --output .../iterations/grip_refit_v9/gpu-fit --config deploy/3dpose/cloud_gpu/host.local.json --allow-assumed --allow-automatic` 执行。保留 v8 对照、固定观测和原阈值，报告单点门控的真实效果，不预设改善。

@@ -23,7 +23,7 @@ def audit(candidate,observations,output):
         rows.append({'frame':i,'frame_1based':i+1,'acceleration_deg_frame2':float(value),'evidence_boundary':len(set(signatures))>1,'sources':[row.get('source','missing') for row in window],'midpoint_residual_source_px':residuals})
     top=sorted(rows,key=lambda row:row['acceleration_deg_frame2'],reverse=True)[:15]
     report={'candidate_sha256':sha256(candidate),'observations_sha256':sha256(observations),'step_max_deg':float(step.max()),'acceleration_p95_deg_frame2':float(np.percentile(acceleration,95)),
-            'adjacent_normal_reversals':(np.where((r[1:,:,2]*r[:-1,:,2]).sum(1)<0)[0]+1).tolist(),'top15_evidence_boundaries':sum(row['evidence_boundary'] for row in top),'top15':top,
+            'adjacent_normal_reversals':(np.where((r[1:,:,2]*r[:-1,:,2]).sum(1)<0)[0]+1).tolist(),'top15_evidence_boundaries':sum(row['evidence_boundary'] for row in top),'all_evidence_boundaries':sum(row['evidence_boundary'] for row in rows),'evaluated_centers':len(rows),'top15':top,
             'limits':'Boundary association is not proof of causality. No adjacent normal reversal does not establish physical face identity. Pixel residuals are in original image coordinates.'}
     write(output,report);return report
 
