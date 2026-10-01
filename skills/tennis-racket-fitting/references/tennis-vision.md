@@ -23,3 +23,5 @@ Local Viewer: `http://127.0.0.1:18769/datasets/DATASET_ID/result/viewer.html`; w
 ## Lessons from actual checks
 
 The directional candidate reduced acceleration slightly but worsened head and shaft reprojection; its gate retained the prior default. Same real/mirror contours caused direction conflicts and require role rejection. Native MHR was absent from older archives: rerun inference and capture it, rather than infer native parameters from exported mesh coordinates. Standard racket dimensions and inferred grip cannot establish measured handle bevels.
+
+The native GPU refit reduced palm-anchor gaps while worsening hand/shaft direction and held-out reprojection. Gap reduction alone is insufficient for acceptance. When capturing multiple angles, use a separate review tab and verify the displayed frame after every seek; simultaneous user annotations can invalidate otherwise correctly named screenshots. Preserve invalid captures as excluded evidence rather than mixing them into the audit sheet.

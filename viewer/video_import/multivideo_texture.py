@@ -10,6 +10,11 @@ import cv2,numpy as np
 from numba import njit
 from run_records import sha256,write,now
 
+def load_data(path):
+    # NPZ array access decompresses each time: materialize only the needed fields.
+    with np.load(path,allow_pickle=False) as archive:
+        return {k:archive[k] for k in ['vertices','source_roots','masks','masks_mirror_sam2','faces'] if k in archive}
+
 @njit(cache=True)
 def uv_lookup(uv,faces,size):
     ids=np.full((size,size),-1,np.int32);bary=np.zeros((size,size,3),np.float32)
@@ -109,11 +114,11 @@ def inspect_clip(folder,faces,cache,step=5):
     archive=folder/'attempts/0001/work/reconstruction.npz';meta=json.loads((folder/'result/mesh_meta.json').read_text());video=folder/'source.mp4'
     manifest=json.loads((archive.parent/'remote_manifest.json').read_text())
     if sha256(video)!=meta['video_sha256'] or manifest['source_sha256']!=meta['video_sha256'] or sha256(archive)!=manifest['artifact_sha256']['reconstruction.npz']:raise ValueError('视频/重建来源哈希不一致')
-    data=np.load(archive,allow_pickle=False)
+    data=load_data(archive)
     if not np.array_equal(data['faces'],faces):raise ValueError('MHR UV 与重建拓扑不一致')
     geometry=folder/'result/mirror_geometry.json';mirror=json.loads(geometry.read_text()) if geometry.exists() else None
     identity={'archive_sha256':sha256(archive),'video_sha256':meta['video_sha256'],'mirror_sha256':sha256(geometry) if geometry.exists() else None,'step':step,'code_sha256':sha256(Path(__file__))}
-    if cache.exists() and cache.with_suffix('.json').exists() and json.loads(cache.with_suffix('.json').read_text())==identity:data.close();return
+    if cache.exists() and cache.with_suffix('.json').exists() and json.loads(cache.with_suffix('.json').read_text())==identity:return
     best=np.zeros(len(faces),np.float32);frames=np.full(len(faces),-1,np.int32);view_ids=np.zeros(len(faces),np.uint8);colors=np.zeros((len(faces),3),np.uint8);heldout=[];all_scores=[];all_colors=[];all_frames=[];all_views=[];cap=cv2.VideoCapture(str(video))
     for index in range(0,meta['frames'],step):
         cap.set(cv2.CAP_PROP_POS_FRAMES,index);ok,image=cap.read()
@@ -125,7 +130,7 @@ def inspect_clip(folder,faces,cache,step=5):
             all_scores.append(score);all_colors.append(rgb);all_frames.append(index);all_views.append(view)
             take=score>best;best[take]=score[take];frames[take]=index;view_ids[take]=view;colors[take]=rgb[take]
         if index%50==0:print('Texture observations',folder.name,index,flush=True)
-    cap.release();data.close()
+    cap.release()
     hids=np.concatenate([r[0] for r in heldout]);hcolors=np.concatenate([r[1] for r in heldout]);hframes=np.concatenate([np.full(len(r[0]),r[2]) for r in heldout]);hviews=np.concatenate([np.full(len(r[0]),r[3]) for r in heldout])
     np.savez_compressed(cache,score=best,frame=frames,view=view_ids,color=colors,all_score=all_scores,all_color=all_colors,all_frame=all_frames,all_view=all_views,heldout_face=hids,heldout_color=hcolors,heldout_frame=hframes,heldout_view=hviews);write(cache.with_suffix('.json'),identity)
 
@@ -147,7 +152,7 @@ def fuse(batch,layout,output,size=2048,step=5):
     face_map,bary=uv_lookup(uv.astype(np.float32),uv_faces.astype(np.int32),size);ys,xs=np.where(face_map>=0);face_ids=face_map[ys,xs];weights=bary[ys,xs]
     rgba=np.zeros((size,size,4),np.uint8);source_clip=np.full((size,size),-1,np.int16);source_frame=np.full((size,size),-1,np.int16);source_view=np.zeros((size,size),np.uint8)
     for clip,folder in enumerate(folders):
-        data=np.load(folder/'attempts/0001/work/reconstruction.npz',allow_pickle=False);meta=json.loads((folder/'result/mesh_meta.json').read_text());mirror=json.loads((folder/'result/mirror_geometry.json').read_text());cap=cv2.VideoCapture(str(folder/'source.mp4'))
+        data=load_data(folder/'attempts/0001/work/reconstruction.npz');meta=json.loads((folder/'result/mesh_meta.json').read_text());mirror=json.loads((folder/'result/mirror_geometry.json').read_text());cap=cv2.VideoCapture(str(folder/'source.mp4'))
         pixel_clip=winner[face_ids];pixel_frames=frames[face_ids];pixel_views=view_ids[face_ids]
         for index in np.unique(frames[(winner==clip)&(quality>0)]):
             cap.set(cv2.CAP_PROP_POS_FRAMES,int(index));ok,image=cap.read()
@@ -160,7 +165,7 @@ def fuse(batch,layout,output,size=2048,step=5):
                 rgb=np.clip(sample(image,xy[valid])*gains[clip],0,255).astype(np.uint8)
                 rgba[ys[locations],xs[locations],:3]=rgb;rgba[ys[locations],xs[locations],3]=(confidence[valid]*255).astype(np.uint8)
                 source_clip[ys[locations],xs[locations]]=clip;source_frame[ys[locations],xs[locations]]=index;source_view[ys[locations],xs[locations]]=view
-        cap.release();data.close();print('Atlas sampled',folder.name,flush=True)
+        cap.release();print('Atlas sampled',folder.name,flush=True)
     # Gutter RGB prevents dark filtering seams; alpha/coverage evidence stays unchanged.
     known=rgba[:,:,3]>0
     if known.any():

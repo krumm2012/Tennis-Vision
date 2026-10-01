@@ -38,7 +38,7 @@ these prerequisites upload/preview remains available and generation is disabled.
 Restart the service after configuring models. Imported videos survive restart.
 
 The built-in runner chooses the largest initial person and follows box overlap;
-it fails explicitly on loss of tracking. Manual multi-person target selection and temporal texture fusion remain future work.
+it fails explicitly on loss of tracking. Manual multi-person target selection remains future work. A separate multi-video MHR UV fusion candidate and review Viewer are available in [MULTIVIDEO_TEXTURE_ITERATION.md](MULTIVIDEO_TEXTURE_ITERATION.md); imported Viewers still use source-video projection by default.
 The cloud multiview runner now adds independent mirror SAM3D and dual-object SAM2;
 local postprocessing supplies racket fitting and per-video mirror calibration. No copied old calibration is used.
 
