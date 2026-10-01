@@ -1,8 +1,19 @@
 import unittest
 import numpy as np
-from multivideo_texture import uv_lookup,depth_map,valid_points,coherent_labels
+from multivideo_texture import uv_lookup,depth_map,valid_points,coherent_labels,views
 
 class TextureTests(unittest.TestCase):
+    def test_independent_mirror_uses_restored_axes_and_skips_missing_inference(self):
+        data={'vertices':np.zeros((2,3,3)),'source_roots':np.tile([1,0,3],(2,1)),'masks':np.ones((2,4,4)),
+              'mirror_vertices':np.zeros((2,3,3)),'mirror_roots':np.tile([-2,1,5],(2,1)),
+              'mirror_valid':np.array([True,False]),'mirror_focal':np.array([100,0]),'masks_mirror_sam2':np.ones((2,4,4))}
+        meta={'mirror_available':True,'focal':[100,100]};plane={'normal_camera':[0,0,1],'distance_camera_m':4}
+        observed=list(views(data,meta,plane,0,'independent'))
+        self.assertEqual(len(observed),2)
+        np.testing.assert_allclose(observed[1][1],np.tile([-2,1,5],(3,1)))
+        self.assertEqual(len(list(views(data,meta,plane,1,'independent'))),1)
+        data['mirror_focal'][0]=99
+        with self.assertRaises(ValueError):list(views(data,meta,plane,0,'independent'))
     def test_view_coherence_never_fills_unobserved_surfaces(self):
         faces=np.array([[0,1,2],[2,1,3],[3,1,4],[5,6,7]],np.int32)
         scores=np.array([[1,.9,1,0],[.95,1,.95,0]],np.float32)

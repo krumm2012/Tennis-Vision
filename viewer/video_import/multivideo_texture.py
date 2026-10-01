@@ -13,7 +13,7 @@ from run_records import sha256,write,now
 def load_data(path):
     # NPZ array access decompresses each time: materialize only the needed fields.
     with np.load(path,allow_pickle=False) as archive:
-        return {k:archive[k] for k in ['vertices','source_roots','masks','masks_mirror_sam2','faces'] if k in archive}
+        return {k:archive[k] for k in ['vertices','source_roots','masks','masks_mirror_sam2','faces','mirror_vertices','mirror_roots','mirror_valid','mirror_focal'] if k in archive}
 
 @njit(cache=True)
 def uv_lookup(uv,faces,size):
@@ -76,11 +76,17 @@ def sample(image,xy):
     if len(xy)>30000:return np.concatenate([sample(image,xy[a:a+30000]) for a in range(0,len(xy),30000)])
     return cv2.remap(image,xy[:,0].astype(np.float32)[:,None],xy[:,1].astype(np.float32)[:,None],cv2.INTER_LINEAR,borderMode=cv2.BORDER_CONSTANT).reshape((len(xy),)+image.shape[2:])
 
-def views(data,meta,mirror,index):
+def views(data,meta,mirror,index,mirror_source='plane'):
     camera=data['vertices'][index]+data['source_roots'][index]
     ref=None
     if meta.get('mirror_available') and mirror and 'masks_mirror_sam2' in data:
-        n=np.array(mirror['normal_camera']);ref=camera-2*(camera@n-mirror['distance_camera_m'])[:,None]*n
+        if mirror_source=='independent':
+            if all(k in data for k in ['mirror_vertices','mirror_roots','mirror_valid','mirror_focal']) and data['mirror_valid'][index]:
+                if not np.isclose(data['mirror_focal'][index],meta['focal'][index],rtol=0,atol=1e-4):raise ValueError('独立镜中网格焦距与同画面相机不一致')
+                # Cloud output already restores x into the original image axes.
+                ref=data['mirror_vertices'][index]+data['mirror_roots'][index]
+        else:
+            n=np.array(mirror['normal_camera']);ref=camera-2*(camera@n-mirror['distance_camera_m'])[:,None]*n
     yield 0,camera,data['masks'][index],ref
     if ref is not None:yield 1,ref,data['masks_mirror_sam2'][index],camera
 
@@ -110,20 +116,20 @@ def observe(camera,faces,mask,focal,size,image,other=None):
     score=np.where(valid&(facing>.3),confidence*facing*np.sqrt(area)*np.clip(np.sqrt(sharpness/40),.3,2),0).astype(np.float32)
     return score,sample(image,xy),sharpness
 
-def inspect_clip(folder,faces,cache,step=5):
+def inspect_clip(folder,faces,cache,step=5,mirror_source='plane'):
     archive=folder/'attempts/0001/work/reconstruction.npz';meta=json.loads((folder/'result/mesh_meta.json').read_text());video=folder/'source.mp4'
     manifest=json.loads((archive.parent/'remote_manifest.json').read_text())
     if sha256(video)!=meta['video_sha256'] or manifest['source_sha256']!=meta['video_sha256'] or sha256(archive)!=manifest['artifact_sha256']['reconstruction.npz']:raise ValueError('视频/重建来源哈希不一致')
     data=load_data(archive)
     if not np.array_equal(data['faces'],faces):raise ValueError('MHR UV 与重建拓扑不一致')
     geometry=folder/'result/mirror_geometry.json';mirror=json.loads(geometry.read_text()) if geometry.exists() else None
-    identity={'archive_sha256':sha256(archive),'video_sha256':meta['video_sha256'],'mirror_sha256':sha256(geometry) if geometry.exists() else None,'step':step,'code_sha256':sha256(Path(__file__))}
+    identity={'archive_sha256':sha256(archive),'video_sha256':meta['video_sha256'],'mirror_sha256':sha256(geometry) if geometry.exists() else None,'step':step,'mirror_source':mirror_source,'code_sha256':sha256(Path(__file__))}
     if cache.exists() and cache.with_suffix('.json').exists() and json.loads(cache.with_suffix('.json').read_text())==identity:return
     best=np.zeros(len(faces),np.float32);frames=np.full(len(faces),-1,np.int32);view_ids=np.zeros(len(faces),np.uint8);colors=np.zeros((len(faces),3),np.uint8);heldout=[];all_scores=[];all_colors=[];all_frames=[];all_views=[];cap=cv2.VideoCapture(str(video))
     for index in range(0,meta['frames'],step):
         cap.set(cv2.CAP_PROP_POS_FRAMES,index);ok,image=cap.read()
         if not ok:raise ValueError('纹理抽样视频解码失败')
-        for view,camera,mask,other in views(data,meta,mirror,index):
+        for view,camera,mask,other in views(data,meta,mirror,index,mirror_source):
             score,rgb,sharpness=observe(camera,faces,mask,meta['focal'][index],meta['image_size'],image,other)
             if index%(step*5)==0:
                 ids=np.flatnonzero(score>0);heldout.append((ids,rgb[ids],index,view));continue
@@ -134,13 +140,13 @@ def inspect_clip(folder,faces,cache,step=5):
     hids=np.concatenate([r[0] for r in heldout]);hcolors=np.concatenate([r[1] for r in heldout]);hframes=np.concatenate([np.full(len(r[0]),r[2]) for r in heldout]);hviews=np.concatenate([np.full(len(r[0]),r[3]) for r in heldout])
     np.savez_compressed(cache,score=best,frame=frames,view=view_ids,color=colors,all_score=all_scores,all_color=all_colors,all_frame=all_frames,all_view=all_views,heldout_face=hids,heldout_color=hcolors,heldout_frame=hframes,heldout_view=hviews);write(cache.with_suffix('.json'),identity)
 
-def fuse(batch,layout,output,size=2048,step=5):
+def fuse(batch,layout,output,size=2048,step=5,mirror_source='plane'):
     output.mkdir(parents=True,exist_ok=True);manifest=json.loads((batch/'batch_manifest.json').read_text())
     if manifest['status']!='ready':raise ValueError('所有视频生成完成后再进行正式合成')
     folders=[Path(row['folder']) for row in manifest['clips']];rig=np.load(layout,allow_pickle=False);faces=rig['faces'];uv=rig['uv'];uv_faces=rig['uv_faces']
     entries=[];identities=[]
     for folder in folders:
-        cache=output/(folder.name+'_observations.npz');inspect_clip(folder,faces,cache,step);entries.append(np.load(cache,allow_pickle=False));identities.append(json.loads(cache.with_suffix('.json').read_text()))
+        cache=output/(folder.name+'_observations.npz');inspect_clip(folder,faces,cache,step,mirror_source);entries.append(np.load(cache,allow_pickle=False));identities.append(json.loads(cache.with_suffix('.json').read_text()))
     scores=np.stack([d['score'] for d in entries]);ids=np.arange(len(faces))
     all_scores=np.concatenate([d['all_score'] for d in entries]);label_clip=np.concatenate([np.full(len(d['all_score']),k) for k,d in enumerate(entries)]);label_frame=np.concatenate([d['all_frame'] for d in entries]);label_view=np.concatenate([d['all_view'] for d in entries])
     labels=coherent_labels(all_scores,faces);winner=label_clip[labels];quality=all_scores[labels,ids];frames=label_frame[labels];view_ids=label_view[labels]
@@ -157,7 +163,7 @@ def fuse(batch,layout,output,size=2048,step=5):
         for index in np.unique(frames[(winner==clip)&(quality>0)]):
             cap.set(cv2.CAP_PROP_POS_FRAMES,int(index));ok,image=cap.read()
             if not ok:raise ValueError('纹理采样帧缺失')
-            for view,camera,mask,other in views(data,meta,mirror,int(index)):
+            for view,camera,mask,other in views(data,meta,mirror,int(index),mirror_source):
                 choose=(pixel_clip==clip)&(pixel_frames==index)&(pixel_views==view)&(quality[face_ids]>0);locations=np.flatnonzero(choose)
                 if not len(locations):continue
                 p=(camera[faces[face_ids[locations]]]*weights[locations,:,None]).sum(1);_,depth,mask,res=visibility(camera,faces,mask,meta['focal'][index],meta['image_size'],other)
@@ -180,11 +186,12 @@ def fuse(batch,layout,output,size=2048,step=5):
     neighbors=face_neighbors(faces);edges=np.c_[np.repeat(ids,3),neighbors.ravel()];edges=edges[(edges[:,1]>=0)&(edges[:,0]<edges[:,1])];supported=(quality[edges[:,0]]>0)&(quality[edges[:,1]]>0)
     transitions=float(np.mean(labels[edges[supported,0]]!=labels[edges[supported,1]]))
     report={'status':'candidate_needs_visual_review','finished_at':now(),'clips':len(folders),'atlas_size':size,'source_video_resolution':'native normalized video, no AI upscaling','layout_sha256':sha256(layout),'code_sha256':sha256(Path(__file__)),'inputs':identities,'single_clip_face_coverage':float((scores[0]>0).mean()),'combined_face_coverage':float((quality>0).mean()),'atlas_observed_texel_fraction':float(known[face_map>=0].mean()),'mirror_texel_fraction':float((source_view[known]==1).mean()) if known.any() else 0,'selection_method':'depth/mask/angle/sharpness with mesh-edge view coherence; no pixel hallucination','neighbor_view_transition_fraction':transitions,'validation':validation,'heldout_rule':f'Every {step*5}th frame excluded from selection; sampled every {step} frames','metric_limits':'appearance residual and template-surface coverage, not calibrated geometry or true novel-view accuracy','unknown_texels':'transparent; gutter RGB does not count as observation','artifact_sha256':{n:sha256(output/n) for n in ['body_texture_rgba.png','texture_sources.npz','appearance_mesh.npz']}}
+    report['mirror_source']=mirror_source
     write(output/'texture_report.json',report)
     for d in entries:d.close()
     rig.close();return report
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--batch',type=Path,required=True);p.add_argument('--layout',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--size',type=int,choices=[1024,2048,4096],default=2048);p.add_argument('--step',type=int,default=5);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--batch',type=Path,required=True);p.add_argument('--layout',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--size',type=int,choices=[1024,2048,4096],default=2048);p.add_argument('--step',type=int,default=5);p.add_argument('--mirror-source',choices=['plane','independent'],default='plane');a=p.parse_args()
     if not 1<=a.step<=25:raise ValueError('纹理采样间隔须为 1–25 帧')
-    print(json.dumps(fuse(a.batch,a.layout,a.output,a.size,a.step),ensure_ascii=False))
+    print(json.dumps(fuse(a.batch,a.layout,a.output,a.size,a.step,a.mirror_source),ensure_ascii=False))
