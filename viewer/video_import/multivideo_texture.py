@@ -56,7 +56,7 @@ def face_neighbors(faces):
             else:edges[edge]=(i,k)
     return neighbors
 
-def coherent_labels(scores,faces,iterations=5):
+def coherent_labels(scores,faces,iterations=5,smoothness=.25):
     """Prefer neighboring faces from a shared view without accepting unseen faces."""
     maximum=scores.max(0);labels=scores.argmax(0);ids=np.arange(len(faces));neighbors=face_neighbors(faces);safe=np.maximum(neighbors,0)
     groups=np.full(len(faces),-1,np.int8)
@@ -67,7 +67,7 @@ def coherent_labels(scores,faces,iterations=5):
         for group in range(4):
             candidates=np.concatenate([labels[None],labels[safe].T],axis=0)
             energy=-np.log(np.maximum(scores[candidates,ids]/np.maximum(maximum,1e-8),1e-8))
-            for k in range(3):energy+=.25*((candidates!=labels[safe[:,k]])&(neighbors[:,k]>=0)&(maximum[safe[:,k]]>0))
+            for k in range(3):energy+=smoothness*((candidates!=labels[safe[:,k]])&(neighbors[:,k]>=0)&(maximum[safe[:,k]]>0))
             take=(groups==group)&(maximum>0);labels[take]=candidates[energy.argmin(0),ids][take]
     labels[maximum==0]=0
     return labels
@@ -140,21 +140,34 @@ def inspect_clip(folder,faces,cache,step=5,mirror_source='plane'):
     hids=np.concatenate([r[0] for r in heldout]);hcolors=np.concatenate([r[1] for r in heldout]);hframes=np.concatenate([np.full(len(r[0]),r[2]) for r in heldout]);hviews=np.concatenate([np.full(len(r[0]),r[3]) for r in heldout])
     np.savez_compressed(cache,score=best,frame=frames,view=view_ids,color=colors,all_score=all_scores,all_color=all_colors,all_frame=all_frames,all_view=all_views,heldout_face=hids,heldout_color=hcolors,heldout_frame=hframes,heldout_view=hviews);write(cache.with_suffix('.json'),identity)
 
-def fuse(batch,layout,output,size=2048,step=5,mirror_source='plane'):
+def fuse(batch,layout,output,size=2048,step=5,mirror_source='plane',selection='quality',observation_root=None):
     output.mkdir(parents=True,exist_ok=True);manifest=json.loads((batch/'batch_manifest.json').read_text())
     if manifest['status']!='ready':raise ValueError('所有视频生成完成后再进行正式合成')
     folders=[Path(row['folder']) for row in manifest['clips']];rig=np.load(layout,allow_pickle=False);faces=rig['faces'];uv=rig['uv'];uv_faces=rig['uv_faces']
     entries=[];identities=[]
     for folder in folders:
-        cache=output/(folder.name+'_observations.npz');inspect_clip(folder,faces,cache,step,mirror_source);entries.append(np.load(cache,allow_pickle=False));identities.append(json.loads(cache.with_suffix('.json').read_text()))
+        cache=(observation_root or output)/(folder.name+'_observations.npz')
+        if observation_root is None:inspect_clip(folder,faces,cache,step,mirror_source)
+        identity=json.loads(cache.with_suffix('.json').read_text())
+        if identity['step']!=step or identity['mirror_source']!=mirror_source or identity['video_sha256']!=sha256(folder/'source.mp4') or identity['archive_sha256']!=sha256(folder/'attempts/0001/work/reconstruction.npz'):raise ValueError('固定观测缓存与本次输入不一致')
+        geometry=folder/'result/mirror_geometry.json'
+        if identity['mirror_sha256']!=(sha256(geometry) if geometry.exists() else None):raise ValueError('固定观测缓存镜面来源已变化')
+        entries.append(np.load(cache,allow_pickle=False));identities.append(identity)
     scores=np.stack([d['score'] for d in entries]);ids=np.arange(len(faces))
     all_scores=np.concatenate([d['all_score'] for d in entries]);label_clip=np.concatenate([np.full(len(d['all_score']),k) for k,d in enumerate(entries)]);label_frame=np.concatenate([d['all_frame'] for d in entries]);label_view=np.concatenate([d['all_view'] for d in entries])
-    labels=coherent_labels(all_scores,faces);winner=label_clip[labels];quality=all_scores[labels,ids];frames=label_frame[labels];view_ids=label_view[labels]
     # Channel exposure alignment uses matching surface-face overlap with first clip.
     gains=[];reference=entries[0]['color'].astype(float)
     for d in entries:
         color=d['color'].astype(float);shared=(d['score']>0)&(scores[0]>0)&(reference.min(1)>30)&(color.min(1)>30)
         gain=np.clip(np.median(reference[shared]/color[shared],axis=0),.85,1.18) if shared.sum()>100 else np.ones(3);gains.append(gain)
+    if selection=='consistency':
+        from texture_consistency import consistency_scores
+        colors=np.concatenate([d['all_color'].astype(np.float32)*gains[k] for k,d in enumerate(entries)])
+        adjusted,_=consistency_scores(all_scores,colors,label_clip)
+        labels=coherent_labels(adjusted,faces,smoothness=.6)
+    elif selection=='quality':labels=coherent_labels(all_scores,faces)
+    else:raise ValueError('Unknown texture selection method')
+    winner=label_clip[labels];quality=all_scores[labels,ids];frames=label_frame[labels];view_ids=label_view[labels]
     face_map,bary=uv_lookup(uv.astype(np.float32),uv_faces.astype(np.int32),size);ys,xs=np.where(face_map>=0);face_ids=face_map[ys,xs];weights=bary[ys,xs]
     rgba=np.zeros((size,size,4),np.uint8);source_clip=np.full((size,size),-1,np.int16);source_frame=np.full((size,size),-1,np.int16);source_view=np.zeros((size,size),np.uint8)
     for clip,folder in enumerate(folders):
@@ -187,6 +200,11 @@ def fuse(batch,layout,output,size=2048,step=5,mirror_source='plane'):
     transitions=float(np.mean(labels[edges[supported,0]]!=labels[edges[supported,1]]))
     report={'status':'candidate_needs_visual_review','finished_at':now(),'clips':len(folders),'atlas_size':size,'source_video_resolution':'native normalized video, no AI upscaling','layout_sha256':sha256(layout),'code_sha256':sha256(Path(__file__)),'inputs':identities,'single_clip_face_coverage':float((scores[0]>0).mean()),'combined_face_coverage':float((quality>0).mean()),'atlas_observed_texel_fraction':float(known[face_map>=0].mean()),'mirror_texel_fraction':float((source_view[known]==1).mean()) if known.any() else 0,'selection_method':'depth/mask/angle/sharpness with mesh-edge view coherence; no pixel hallucination','neighbor_view_transition_fraction':transitions,'validation':validation,'heldout_rule':f'Every {step*5}th frame excluded from selection; sampled every {step} frames','metric_limits':'appearance residual and template-surface coverage, not calibrated geometry or true novel-view accuracy','unknown_texels':'transparent; gutter RGB does not count as observation','artifact_sha256':{n:sha256(output/n) for n in ['body_texture_rgba.png','texture_sources.npz','appearance_mesh.npz']}}
     report['mirror_source']=mirror_source
+    report['selection']=selection
+    report['observation_cache_sha256']={folder.name:sha256((observation_root or output)/(folder.name+'_observations.npz')) for folder in folders}
+    if selection=='consistency':
+        report['selection_method']='clip-balanced training color consistency soft penalty + mesh-edge view coherence 0.6; actual single-source pixels, no invented color'
+        report['consistency_code_sha256']=sha256(Path(__file__).with_name('texture_consistency.py'))
     write(output/'texture_report.json',report)
     for d in entries:d.close()
     rig.close();return report

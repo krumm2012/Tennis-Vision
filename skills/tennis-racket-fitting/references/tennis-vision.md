@@ -13,6 +13,7 @@ Repository: `/Users/krum5539/Documents/Tennis-Vision`; commands run from its roo
 - `grip_contact_audit.py`: palm-anchor gap, raw hand/shaft conflict, joint-cylinder proxy.
 - `refit_readiness.py`, `refit_fullbody.py`, `run_fullbody_refit.py`: private native-MHR optimization; assumptions/automatic observations require explicit provisional flags.
 - `audit_racket_motion.py`, `audit_racket_direction.py`: motion and observation metrics.
+- `audit_native_batch.py`: actual CUDA replay of existing real/mirror native archives; preserves absent mirror frames and records model/source hashes. `audit_multivideo_evidence.py` independently checks normalized timeline, masks and raw projection. See `viewer/video_import/MULTIAGENT_GPU_ITERATION.md`; replay consistency does not prove grip or pixel accuracy.
 
 ## Execution
 

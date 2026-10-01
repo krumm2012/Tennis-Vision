@@ -6,8 +6,10 @@ from run_records import write,sha256
 
 def publish(batch,fusion,baseline,layout,destination):
     report=json.loads((fusion/'texture_report.json').read_text());first=Path(json.loads((batch/'batch_manifest.json').read_text())['clips'][0]['folder'])
+    baseline_report=json.loads((baseline/'texture_report.json').read_text())
     if (destination/'record.json').exists() and not json.loads((destination/'record.json').read_text()).get('texture_review'):raise ValueError('Cannot replace an accepted dataset with a texture review')
     if report['layout_sha256']!=sha256(layout) or report['artifact_sha256']['body_texture_rgba.png']!=sha256(fusion/'body_texture_rgba.png'):raise ValueError('Texture candidate provenance mismatch')
+    if baseline_report['layout_sha256']!=sha256(layout) or baseline_report['artifact_sha256']['body_texture_rgba.png']!=sha256(baseline/'body_texture_rgba.png'):raise ValueError('Texture baseline provenance mismatch')
     destination.mkdir(exist_ok=True,parents=True);(destination/'result').mkdir(exist_ok=True)
     out=destination/'result'
     with np.load(layout,allow_pickle=False) as rig:
@@ -20,6 +22,7 @@ def publish(batch,fusion,baseline,layout,destination):
         mapping[mapping<0]=0;mapping.astype('<u4').tofile(out/'appearance_map.bin');rig['uv'].astype('<f4').tofile(out/'appearance_uv.bin');uv_faces.astype('<u4').tofile(out/'appearance_indices.bin')
     for name in ['body_texture_rgba.png','texture_report.json']:shutil.copy2(fusion/name,out/name)
     shutil.copy2(baseline/'body_texture_rgba.png',out/'body_texture_baseline.png');shutil.copy2(first/'result/mesh_meta.json',out/'mesh_meta.json')
+    shutil.copy2(baseline/'texture_report.json',out/'texture_baseline_report.json')
     for source,name in [(first/'result/mesh_local.bin','mesh_local.bin'),(first/'source.mp4','video.mp4')]:
         if not (out/name).exists():(out/name).hardlink_to(source.resolve())
         elif sha256(out/name)!=sha256(source):raise ValueError('Review source changed')

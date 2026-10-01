@@ -1,8 +1,22 @@
 import unittest
 import numpy as np
 from multivideo_texture import uv_lookup,depth_map,valid_points,coherent_labels,views
+from texture_consistency import consistency_scores
 
 class TextureTests(unittest.TestCase):
+    def test_training_color_consistency_keeps_support_and_penalizes_outlier(self):
+        scores=np.array([[1.,0],[1.,0],[1.1,0]],np.float32)
+        colors=np.array([[[90,90,90],[0,0,0]],[[92,92,92],[0,0,0]],[[240,240,240],[0,0,0]]],np.float32)
+        adjusted,consensus=consistency_scores(scores,colors,np.array([0,1,2]))
+        np.testing.assert_array_equal(adjusted>0,scores>0)
+        self.assertLess(adjusted[2,0],adjusted[0,0])
+        np.testing.assert_allclose(consensus[0],92)
+    def test_color_consensus_balances_clips_and_never_reads_heldout(self):
+        colors=np.tile(np.array([[[10,10,10]]],np.float32),(12,1,1))
+        colors[-2]=100;colors[-1]=110
+        _,consensus=consistency_scores(np.ones((12,1)),colors,np.array([0]*10+[1,2]))
+        np.testing.assert_allclose(consensus,100)
+
     def test_independent_mirror_uses_restored_axes_and_skips_missing_inference(self):
         data={'vertices':np.zeros((2,3,3)),'source_roots':np.tile([1,0,3],(2,1)),'masks':np.ones((2,4,4)),
               'mirror_vertices':np.zeros((2,3,3)),'mirror_roots':np.tile([-2,1,5],(2,1)),

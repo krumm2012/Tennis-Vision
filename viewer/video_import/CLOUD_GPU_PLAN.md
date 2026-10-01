@@ -132,3 +132,5 @@ python3 -B -m unittest discover -s viewer/video_import -p 'test_*.py' -v
 ## 多视频纹理与握拍复核
 
 实际运行、数据目录、合成方法和未通过的重拟合候选见 [MULTIVIDEO_TEXTURE_ITERATION.md](MULTIVIDEO_TEXTURE_ITERATION.md)。
+
+三 Agent 质量迭代的实际云回放组件、执行命令、下载记录及纹理对照见 [MULTIAGENT_GPU_ITERATION.md](MULTIAGENT_GPU_ITERATION.md)。GPU 计算持有共同锁；本地输入审计与纹理优化可并行，已完成推理结果按身份哈希复用。

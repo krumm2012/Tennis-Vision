@@ -119,3 +119,5 @@ python3 -B viewer/video_import/publish_texture_review.py \
 
 本地 Docker 18769 已更新，18768 写入服务可用；已验收 85ade... 的球拍文件保持原 SHA-256，公网部署没有更新。37 项 Python 测试和球拍插值测试通过，HTML 脚本语法检查通过。graphify 重建依然因本机缺少模块失败；生成数据不进入 Git。
 独立合成 PNG SHA-256：`fde36a1283ca8a35adcd2bcbff1b1097e18a70c9a4a051379e622bf17e6d1192`；UV 源码 SHA-256：`b270ced7322873ae427479c9ea4951ab77c85b8f5c26a5e642706fac2584a938`。
+
+后续已按用户选择使用 3 个 agent 完成云 CUDA 回放、独立输入审计及固定留出纹理增量优化。实际执行、候选对照与保留的回归见 [MULTIAGENT_GPU_ITERATION.md](MULTIAGENT_GPU_ITERATION.md)。本节上轮数据与指标继续保留用于比较。
