@@ -54,7 +54,7 @@ class GripObjectiveTests(unittest.TestCase):
         marks={'frames':[{'frame':i,'points':{'handle_end':[640,378.3333333],'tip':[640,606.6666667]},'mirror_points':{},'source':'automatic_contour_unverified'} for i in [0,2]]}
         calibration={'dimensions_cm':{},'measured':False};ready={'train_frames':[0],'heldout_frames':[2],'validation_source':'synthetic_fixture'}
         out,report=solve(Head(),data,meta,poses,marks,calibration,ready,steps=2,device='cpu')
-        self.assertEqual(report['objective_version'],'confidence_observations_v3_normalized');self.assertFalse(report['published_to_viewer'])
+        self.assertEqual(report['objective_version'],'confidence_observations_v4_spike_gated');self.assertFalse(report['published_to_viewer'])
         self.assertEqual(report['heldout_frames'],[2]);self.assertIn('hand_shaft_deg',report['contact_after'])
         for value in out.values():self.assertTrue(np.isfinite(value).all())
         split,_=solve(Head(),data,meta,poses,marks,calibration,ready,steps=2,device='cpu',batch_size=2)

@@ -166,9 +166,10 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
     heldout_after=observation_diagnostics(out['racket_rotation'],out['racket_translation'],heldout)
     observation_gate=all(heldout_after[k]['p95']<=v['p95']+1e-3 for k,v in heldout_before.items() if v['samples'])
     contact_gate=all(after_contact[k]['p95']<=before_contact[k]['p95']+1e-3 for k in ['palm_gap_mm','finger_radial_gap_mm','handle_segment_gap_mm','hand_shaft_deg','rotation_step_deg','angular_acceleration_deg_frame2'])
-    report={'objective_version':'confidence_observations_v3_normalized','contact_before':before_contact,'contact_after':after_contact,
+    report={'objective_version':'confidence_observations_v4_spike_gated','contact_before':before_contact,'contact_after':after_contact,
             'contact_and_direction_gate_passed':bool(contact_gate),'heldout_observation_gate_passed':bool(observation_gate),
             'heldout_observations_before':heldout_before,'heldout_observations_after':heldout_after,'hand_prior_downweighted_frames':int((hand_weight<1).sum()),
+            'isolated_spike_gates':marks.get('isolated_spike_gates',[]),
             'observation_policy':'manual frames replace auto; per-point confidence/uncertainty; heldout frames excluded; unverified rim sides unordered',
             'manual_observation_frames':sum(r.get('source')=='manual_review' for r in marks['frames']),
             'train_frames':sorted(train),'heldout_frames':sorted(heldout),

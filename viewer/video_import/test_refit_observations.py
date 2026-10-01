@@ -26,4 +26,12 @@ class ObservationTests(unittest.TestCase):
             with (root/'racket_keypoints.json').open('a') as f:f.write(' ')
             with self.assertRaises(ValueError):automatic_rows(root,'own')
 
+    def test_spikes_are_downweighted_without_suppressing_swings_or_using_holdout(self):
+        from refit_observations import gate_isolated_points
+        def rows(xs):return [{'frame':i,'source':'automatic_contour_unverified','points':{'tip':[x,100]},'mirror_points':{},'weights':{'points':{'tip':.2}}} for i,x in enumerate(xs)]
+        spike=rows([10,50,12]);events=gate_isolated_points(spike,set(),1);self.assertEqual(len(events),1);self.assertAlmostEqual(spike[1]['weights']['points']['tip'],.02)
+        self.assertEqual(gate_isolated_points(rows([10,50,90]),set(),1),[])
+        self.assertEqual(gate_isolated_points(rows([10,50,12]),{0},1),[])
+        manual=rows([10,50,12]);manual[1]['source']='manual_review';self.assertEqual(gate_isolated_points(manual,set(),1),[])
+
 if __name__=='__main__':unittest.main()
