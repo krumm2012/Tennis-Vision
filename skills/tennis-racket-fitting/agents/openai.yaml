@@ -1,0 +1,4 @@
+interface:
+  display_name: "网球握拍与球拍拟合"
+  short_description: "联合手部关键点、真人与镜面观测，检查握拍接触和球拍拟合质量"
+  default_prompt: "使用 $tennis-racket-fitting 检查当前视频的握拍、拍面方向和拟合可靠性。"

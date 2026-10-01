@@ -15,7 +15,7 @@ def main():
     if env.get('VIEWER_MULTIVIEW')=='1' and not env.get('VIEWER_SAM2_WEIGHTS'):raise ValueError('双视角生成需要 SAM2 权重路径')
     ssh(c,['mkdir','-p',c['root']+'/code',c['root']+'/jobs'])
     hashes={}
-    for source in [Path(__file__).with_name('worker.py'),ROOT/'viewer/video_import/generate_sam.py',ROOT/'viewer/video_import/run_records.py',ROOT/'viewer/video_import/generate_multiview.py',ROOT/'viewer/video_import/mhr_parameters.py',ROOT/'viewer/video_import/refit_fullbody.py',ROOT/'viewer/video_import/refit_readiness.py',ROOT/'viewer/video_import/racket_calibration.py',ROOT/'viewer/video_import/racket_landmarks.py']:
+    for source in [Path(__file__).with_name('worker.py'),ROOT/'viewer/video_import/generate_sam.py',ROOT/'viewer/video_import/run_records.py',ROOT/'viewer/video_import/generate_multiview.py',ROOT/'viewer/video_import/mhr_parameters.py',ROOT/'viewer/video_import/refit_fullbody.py',ROOT/'viewer/video_import/refit_readiness.py',ROOT/'viewer/video_import/racket_calibration.py',ROOT/'viewer/video_import/racket_landmarks.py',ROOT/'viewer/video_import/export_mhr_uv.py']:
         hashes[source.name]=sha256(source)
         copy(c,source,c['root']+'/code/'+source.name,upload=True)
     with tempfile.TemporaryDirectory() as d:

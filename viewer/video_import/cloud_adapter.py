@@ -36,6 +36,14 @@ def run(video,output,c,poll=2,timeout=13800,base_job=None):
     write(output/'request.json',request)
     copy(c,output/'request.json',folder+'/request.json',upload=True)
     ssh(c,[c['python'],worker,'start','--root',c['root'],'--job',job])
+    return collect(video,output,c,job,poll,timeout)
+
+def collect(video,output,c,job,poll=2,timeout=13800):
+    """Resume an existing durable job; never dispatch duplicate inference."""
+    if not re.fullmatch('[0-9a-f]{32}',job):raise ValueError('无效 GPU job')
+    video=Path(video);output=Path(output);output.mkdir(parents=True,exist_ok=True)
+    request={'source_sha256':sha256(video)}
+    folder=f"{c['root']}/jobs/{job}";worker=f"{c['root']}/code/worker.py"
     deadline=time.monotonic()+timeout
     last_status=None;last_message=0
     try:

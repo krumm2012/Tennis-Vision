@@ -75,6 +75,10 @@ def main():
         with (base/'worker.log').open('a') as log:
             child=subprocess.Popen([sys.executable,str(Path(__file__).resolve()),'run','--root',str(a.root),'--job',a.job],stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
         print(json.dumps({'job_id':a.job,'pid':child.pid}));return
-    if not execute(a.root,a.job):raise SystemExit(1)
+    # Serialize all SSH clients on one GPU, including independent refit jobs.
+    import fcntl
+    with (a.root/'gpu.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        if not execute(a.root,a.job):raise SystemExit(1)
 
 if __name__=='__main__':main()
