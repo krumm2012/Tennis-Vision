@@ -19,6 +19,8 @@ def package(video, archive, destination):
     if not 0<fps<=120 or not width or not height:raise ValueError('无法读取标准化视频')
     with np.load(archive,allow_pickle=False) as data:
         vertices=data['vertices'];faces=data['faces'];roots=data['source_roots'];focal=data['focal'];masks=data['masks']
+        mirror_masks=data['masks_mirror_sam2'] if 'masks_mirror_sam2' in data else None
+        if mirror_masks is not None and (mirror_masks.shape!=masks.shape or mirror_masks.dtype!=np.uint8):raise ValueError('镜中 SAM2 遮罩与真人遮罩不匹配')
         if vertices.ndim!=3 or vertices.shape[0]!=count or vertices.shape[2]!=3 or not 3<=vertices.shape[1]<=100000:raise ValueError('网格数量与视频帧数不一致')
         if not 1<=count<=3000:raise ValueError('视频帧数超出范围')
         if faces.ndim!=2 or faces.shape[1]!=3 or not np.issubdtype(faces.dtype,np.integer) or faces.size==0 or faces.min()<0 or faces.max()>=vertices.shape[1]:raise ValueError('网格索引无效')
@@ -26,7 +28,7 @@ def package(video, archive, destination):
         if masks.ndim!=3 or masks.shape[0]!=count or masks.dtype!=np.uint8 or min(masks.shape[1:])<2:raise ValueError('需要每帧对应的 uint8 人物遮罩')
         if not all(np.isfinite(a).all() for a in (vertices,roots,focal)):raise ValueError('模型输出含无效数值')
         destination=Path(destination);destination.mkdir(parents=True,exist_ok=False)
-        cols=math.ceil(math.sqrt(count));rows=math.ceil(count/cols);edge=min(320,8192//max(cols,rows));scale=edge/max(width,height);tw=max(1,round(width*scale));th=max(1,round(height*scale))
+        cols=math.ceil(math.sqrt(count));rows=math.ceil(count/cols);edge=min(512 if mirror_masks is not None else 320,8192//max(cols,rows));scale=edge/max(width,height);tw=max(1,round(width*scale));th=max(1,round(height*scale))
         atlas=np.zeros((rows*th,cols*tw,3),np.uint8);stats=[]
         for i,mask in enumerate(masks):
             tile=cv2.resize(mask,(tw,th),interpolation=cv2.INTER_AREA);atlas[i//cols*th:(i//cols+1)*th,i%cols*tw:(i%cols+1)*tw,2]=tile
@@ -43,6 +45,12 @@ def package(video, archive, destination):
         centers=((vertices.min(axis=1)+vertices.max(axis=1))/2).tolist()
         spans=np.max(vertices.max(axis=1)-vertices.min(axis=1),axis=1).tolist()
         metadata={'video_sha256':hashlib.sha256(Path(video).read_bytes()).hexdigest(),'frames':count,'vertices':vertices.shape[1],'faces':len(faces),'fps':fps,'image_size':[width,height],'mask_atlas_grid':[cols,rows],'source_roots':roots.tolist(),'focal':focal.tolist(),'display_centers':centers,'display_spans':spans,'mirror_available':False,'stabilization_available':True,'stabilization':{'method':'symmetric_speed_adaptive','max_offset_m':.015},'texture_method':'source_video_projection'}
+        provenance=Path(archive).parent/'multiview_manifest.json'
+        if provenance.exists():
+            report=json.loads(provenance.read_text())
+            if report['source_sha256']!=metadata['video_sha256'] or report['frames']!=count or report['image_size']!=[width,height]:raise ValueError('多视角来源与视频不一致')
+            shutil.copy2(provenance,destination/provenance.name)
+            metadata.update(mask_method=report['sam2_model'],mirror_sam3d_frames=report['mirror_sam3d_frames'],multiview_inference_available=bool(report['mirror_available']))
         def write(name,value):(destination/name).write_text(json.dumps(value,separators=(',',':')))
         write('mesh_meta.json',metadata);write('person_masks_sam2_stats.json',stats);write('mirror_geometry_frames.json',[{'accepted':False} for _ in range(count)]);write('mirror_geometry.json',{'normal_camera':[0,0,1],'distance_camera_m':0})
         camera=vertices+roots[:,None,:]

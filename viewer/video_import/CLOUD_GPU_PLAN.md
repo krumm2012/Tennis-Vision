@@ -10,6 +10,7 @@ import.html 上传
  → cloud_adapter.py：视频 SHA-256、SSH 上传、提交任务
  → GPU worker.py：记录任务、启动独立进程
  → generate_sam.py：人物分割与跟踪 → SAM 3D Body → 网格/相机/关节/遮罩
+ → generate_multiview.py（VIEWER_MULTIVIEW=1）：镜中独立 SAM3D + 双人物 SAM2
  → 结果与日志回传：核对视频和 NPZ 哈希
  → package_result.py：校验帧数/拓扑/数值，生成稳定网格与诊断
  → 独立 Three.js Viewer：源视频投影纹理、原始/稳定对照
@@ -72,12 +73,12 @@ NPZ 禁止 pickle，`F` 等于标准化视频解码帧数，`V/T` 为模型顶�
 | faces | `[T,3]`，固定拓扑整数索引 |
 | source_roots | `[F,3]`，米，相机平移 |
 | focal | `[F]`，标准化视频像素焦距 |
-| masks | `[F,H,W]`，uint8，全画面人物遮罩，长边最大 320 |
+| masks | `[F,H,W]`，uint8，全画面人物遮罩；单视角旧输出长边 320，双 SAM2 输出长边 512 |
 | joints / joints2d | SAM 3D / 2D 关节，供稳定与后续分析使用 |
 
 贴图通过 `vertices + source_roots` 和每帧焦距投影到当前视频画面，再结合人物遮罩与可见性筛选取色。不是逐帧人工修补。遮罩 PNG 的浏览器 R 通道有效（OpenCV 编码前 BGR 索引 2）。原始网格用于源投影，稳定网格用于显示，避免平滑直接改变取色坐标。
 
-发布产物包括 `video.mp4`、原始/稳定网格 BIN、faces BIN、mesh metadata、遮罩图集和统计、`quality_report.json`、`run_manifest.json`、`viewer.html`。`mesh_smooth.bin` 是实际轻量稳定结果；refined/temporal 暂为原始网格副本，不声称实现高级时序重建。新视频时间纹理融合关闭，未拍摄到的表面保留灰色。后续已接入可选 Wilson 球拍后处理及配对镜面标记/拟合；镜面需完成各视频角点确认。球和实测三维场地仍未生成。
+发布产物包括 `video.mp4`、原始/稳定网格 BIN、faces BIN、mesh metadata、遮罩图集和统计、`quality_report.json`、`run_manifest.json`、`viewer.html`。`mesh_smooth.bin` 是实际轻量稳定结果；refined 在双视角一致性通过后为稳定网格加手部小幅显示变形，temporal 仍为原始网格副本，不声称实现高级时序重建。新视频时间纹理融合关闭，未拍摄到的表面保留灰色。后续已接入可选 Wilson 球拍后处理及配对镜面标记/拟合；镜面需完成各视频角点确认。球和实测三维场地仍未生成。
 
 ## 5. 任务记录及故障复查
 
@@ -98,7 +99,7 @@ output/video_library/<dataset_id>/
 
 **画面内顶点比例不是贴图覆盖率，也不是姿态准确率。** 遮罩面积分母是完整视频画面。第一轮未实现可见表面贴图未覆盖率、分阶段性能统计或教学评分。
 
-适配器等待上限 6900 秒，推理上限 6800 秒，本地任务上限 7200 秒。推理/跟踪失败、文件损坏或视频哈希不符时不会发布结果，日志尽量回传。服务重启把进行中任务标记为可重试失败；远端独立进程可能继续运行。当前没有自动恢复远端任务、取消、关机或清理机制，重新生成前应按保存的 remote_job_id 检查，避免重复计算。
+适配器等待上限 13800 秒，两个 GPU 阶段分别上限 6800 秒，本地任务上限 14400 秒。推理/跟踪失败、文件损坏或视频哈希不符时不会发布结果，日志尽量回传。服务重启把进行中任务标记为可重试失败；远端独立进程可能继续运行。当前没有自动恢复远端任务、取消、关机或清理机制，重新生成前应按保存的 remote_job_id 检查，避免重复计算。
 
 ```sh
 # 在已登录 GPU 主机中查看指定任务
@@ -116,3 +117,9 @@ python3 -B -m unittest discover -s viewer/video_import -p 'test_*.py' -v
 ```
 
 下一阶段优先：人工选择跟踪主体、切镜/遮挡处理、贴图覆盖诊断与可靠缓存，复核球拍握持/拍面，再加入球/场地和击球分段。教学指导需要证据时间段、数据质量及人工复核入口；当前新视频不会套用默认视频教学报告。
+
+## 7. 2026-10-01 双人物云推理补齐
+
+实际镜中 SAM3D、SAM2 安装/权重路径、执行命令、NPZ 契约及当前验收见
+[MULTIVIEW_GPU_ITERATION.md](MULTIVIEW_GPU_ITERATION.md)。原始视频保存为
+`original.video`（不对浏览器公开），标准化和推理输入统一为 25 fps、最大宽度 2560。

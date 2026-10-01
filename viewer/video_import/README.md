@@ -16,8 +16,8 @@ python3 viewer/video_import/server.py
 ```
 
 Uploads are stored under ignored `output/video_library/<random id>/`. Imported
-videos are normalized to 25 fps, max width 1280, H.264 and no audio. The original
-upload is removed after conversion. Limits: 1 GB and 120 seconds. The current
+videos are normalized to 25 fps, max width 2560, H.264 and no audio. The original
+upload is retained privately as original.video and is never served over HTTP. Limits: 1 GB and 120 seconds. The current
 sample dataset is never changed or automatically replaced. Video library access
 is bound to loopback and checks Host and Origin. It is not a public upload API.
 
@@ -38,9 +38,9 @@ these prerequisites upload/preview remains available and generation is disabled.
 Restart the service after configuring models. Imported videos survive restart.
 
 The built-in runner chooses the largest initial person and follows box overlap;
-it fails explicitly on loss of tracking. Multi-person target selection, SAM2
-tracking, racket reconstruction, per-video court/mirror calibration and temporal
-texture fusion remain separate work. No copied old calibration is used.
+it fails explicitly on loss of tracking. Manual multi-person target selection and temporal texture fusion remain future work.
+The cloud multiview runner now adds independent mirror SAM3D and dual-object SAM2;
+local postprocessing supplies racket fitting and per-video mirror calibration. No copied old calibration is used.
 
 A trusted local adapter, including one that dispatches to an existing GPU worker,
 can be selected with `VIEWER_GENERATOR_COMMAND`, a JSON array of command arguments.
@@ -57,7 +57,7 @@ It exports `reconstruction.npz` with no pickled objects:
 | masks | uint8 [F,H,W], person confidence 0–255, full-image coordinates |
 
 F must exactly match the normalized input video. Results are validated and
-published only after packaging succeeds; jobs are serialized, have a two-hour
+published only after packaging succeeds; jobs are serialized, have a four-hour
 timeout, and interrupted jobs become retryable failures on restart. Errors are
 shown in the library; detailed runner logs stay in attempts/<number>/generation.log; remote logs, hashes and manifests stay in its work/ folder.
 Do not reuse the default video's output as a generator for a new video.
@@ -78,7 +78,8 @@ The dataset Viewer now has a collapsible **镜面与球拍** panel. Use the same
 
 Enter measured AB/AD lengths. The 3.3/4.8 values are editable starting values, not measurements of each new video. **拟合镜面** fits the paired corners using the current video focal estimate, checks residuals and positive depths, matches reflected-body projections against current-video person masks, and writes mirror plane/masks. The fit is an estimate; matching corners alone cannot validate body scale or true camera calibration. The new camera clip now also has an automatic joint-based mirror estimate, following the default Viewer's SAM-camera registration approach; paired corner markers remain available for manual review.
 
-Wilson mesh geometry is reused from the default asset; its old motion is never reused. Current-video racket silhouettes are associated with the selected SAM wrist and fitted to a rigid racket. Only bounded gaps up to 0.24 s are interpolated; unsupported frames hide the racket. The planar orientation and real grip/size remain ambiguous. This iteration does not deform fingers to grip the racket and does not implement the default video's full joint palm optimization.
+Wilson mesh geometry is reused from the default asset; its old motion is never reused. Current-video racket silhouettes are associated with the selected SAM wrist and fitted to a rigid racket. Only bracketed gaps up to 0.6 s are completed by constraints; unsupported frames hide the racket. The planar orientation and real grip/size remain ambiguous. The fitter uses MCP/PIP grasp corridors, wrist anchoring, real/mirror silhouettes and SO(3) temporal constraints.
+The dual-view hand display is a bounded preview, not anatomical grip verification or MHR pose refitting.
 
 ```sh
 python3 deploy/3dpose/cloud_gpu/start_local.py \
@@ -129,3 +130,12 @@ python3 -B viewer/video_import/audit_racket_motion.py \
 ```
 
 输出最大帧间旋转、角加速度和隐藏数；这类稳定性指标不代表拍面三维准确率。原图、局部候选、未平滑基线、握持/稳定性清单、每次推理及发布前结果均按视频/attempt 保留。云推理后按完整链自动运行；`upgrade_resolution.py` 只用于同时间轴的分辨率转移，不是重新 SAM 推理。
+
+## Independent mirror SAM3D and genuine SAM2
+
+See [MULTIVIEW_GPU_ITERATION.md](MULTIVIEW_GPU_ITERATION.md) for deployed components,
+commands, NPZ fields, actual run hashes and acceptance metrics. With
+`VIEWER_MULTIVIEW=1`, new videos automatically run both stages. R/G mask atlas
+channels contain real/mirror SAM2 video propagation; YOLO only supplies prompts.
+The default demo remains available. Changed mirror annotations invalidate the
+previous hand constraints; recalibration recomputes matching constraints and racket fit.

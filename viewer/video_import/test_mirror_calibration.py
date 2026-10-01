@@ -2,7 +2,7 @@ import unittest,json,tempfile
 from pathlib import Path
 import numpy as np
 from scipy.spatial.transform import Rotation
-from mirror_calibration import fit,corners,apply
+from mirror_calibration import fit,corners,apply,apply_geometry
 
 class MirrorCalibrationTests(unittest.TestCase):
  def sample(self):
@@ -28,5 +28,20 @@ class MirrorCalibrationTests(unittest.TestCase):
    p=(vertices[0,:2,:2]+[0,0])/22*850+[480,360];box=[p[0,0],p[0,1],p[1,0],p[1,1]+850/22];poly=[[box[0],box[1]],[box[2],box[1]],[box[2],box[3]],[box[0],box[3]]]
    evidence={'video_sha256':'sample','frames':[{'persons':[{'box':box,'polygon':poly}]}]*10};(out/'person_candidates.json').write_text(json.dumps(evidence))
    result=apply(folder,bundle);self.assertEqual(result['mask_frames'],10);mask=cv2.imread(str(out/'person_masks_sam2.png'));self.assertTrue(np.all(mask[:,:,2]==255));self.assertGreater(np.count_nonzero(mask[:,:,1]),0)
+ def test_sam2_confidence_is_preserved_without_yolo_polygon_substitution(self):
+  import cv2
+  _,meta=self.sample();meta.update(source_roots=[[0,0,8]],frames=1,mask_atlas_grid=[1,1],focal=[850])
+  vertices=np.array([[[-.3,-.5,0],[.3,-.5,0],[.3,.5,0],[-.3,.5,0]]]);sam2=np.zeros((1,72,96),np.uint8);sam2[0,34:38,47:50]=180
+  with tempfile.TemporaryDirectory() as directory:
+   folder=Path(directory);out=folder/'result';out.mkdir();work=folder/'attempts/0001/work';work.mkdir(parents=True)
+   np.savez(work/'reconstruction.npz',vertices=vertices,masks_mirror_sam2=sam2)
+   (folder/'record.json').write_text(json.dumps({'attempt':1}));(out/'mesh_meta.json').write_text(json.dumps(meta))
+   atlas=np.zeros((72,96,3),np.uint8);atlas[:,:,2]=213;cv2.imwrite(str(out/'person_masks_sam2.png'),atlas)
+   (out/'person_masks_sam2_stats.json').write_text(json.dumps([{'real':1,'mirror':0}]))
+   (out/'person_candidates.json').write_text(json.dumps({'video_sha256':'sample','frames':[{'persons':[]}]}))
+   geometry={'normal_camera':[0,0,1],'distance_camera_m':15.,'video_sha256':'sample'}
+   report=apply_geometry(folder,geometry);self.assertEqual(report['mask_frames'],1)
+   output=cv2.imread(str(out/'person_masks_sam2.png'));np.testing.assert_array_equal(output[:,:,1],sam2[0]);self.assertTrue((output[:,:,2]==213).all())
+   self.assertEqual(json.loads((out/'mirror_geometry_frames.json').read_text())[0]['source'],'SAM2_video_propagation')
 
 if __name__=='__main__':unittest.main()

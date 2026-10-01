@@ -24,12 +24,16 @@ def copy(c,source,dest,upload=False):
     args=[str(source),remote] if upload else [remote,str(dest)]
     subprocess.run(['scp',*SSH_OPTIONS,'-P',str(c.get('port',22)),*args],check=True,timeout=600)
 
-def run(video,output,c,poll=2,timeout=6900):
+def run(video,output,c,poll=2,timeout=13800,base_job=None):
+    if base_job and not re.fullmatch('[0-9a-f]{32}',base_job):raise ValueError('无效 parent GPU job')
     video=Path(video).resolve();output=Path(output);output.mkdir(parents=True,exist_ok=True)
     job=uuid.uuid4().hex;folder=f"{c['root']}/jobs/{job}";worker=f"{c['root']}/code/worker.py"
     write(output/'remote_job.json',{'job_id':job,'source_sha256':sha256(video),'transport':'ssh'})
     ssh(c,['mkdir','-p',folder]);copy(c,video,folder+'/source.mp4',upload=True)
-    request={'job_id':job,'source_sha256':sha256(video)};write(output/'request.json',request)
+    request={'job_id':job,'source_sha256':sha256(video)}
+    if base_job:
+        request['base_job_id']=base_job
+    write(output/'request.json',request)
     copy(c,output/'request.json',folder+'/request.json',upload=True)
     ssh(c,[c['python'],worker,'start','--root',c['root'],'--job',job])
     deadline=time.monotonic()+timeout
@@ -50,6 +54,7 @@ def run(video,output,c,poll=2,timeout=6900):
         if manifest.get('source_sha256')!=request['source_sha256']:raise ValueError('云结果与当前视频不匹配')
         if sha256(output/'reconstruction.npz.part')!=manifest['artifact_sha256']['reconstruction.npz']:raise ValueError('云结果哈希校验失败')
         (output/'reconstruction.npz.part').replace(output/'reconstruction.npz')
+        if manifest.get('multiview'):write(output/'multiview_manifest.json',manifest['multiview'])
     finally:
         for name,target in [('worker.log','worker.log'),('run_manifest.json','remote_manifest.json')]:
             try:copy(c,folder+'/'+name,output/target)
@@ -57,5 +62,5 @@ def run(video,output,c,poll=2,timeout=6900):
     return job
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--video',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--config');a=p.parse_args()
-    run(a.video,a.output,config(a.config))
+    p=argparse.ArgumentParser();p.add_argument('--video',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--config');p.add_argument('--base-job');a=p.parse_args()
+    run(a.video,a.output,config(a.config),base_job=a.base_job)

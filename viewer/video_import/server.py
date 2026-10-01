@@ -71,7 +71,7 @@ class Library:
             if work.exists(): shutil.rmtree(work)
             work.mkdir()
             with (run / 'generation.log').open('w') as log:
-                subprocess.run([*self.command,'--video',str(folder/'source.mp4'),'--output',str(work)], stdout=log, stderr=subprocess.STDOUT, check=True, timeout=7200)
+                subprocess.run([*self.command,'--video',str(folder/'source.mp4'),'--output',str(work)], stdout=log, stderr=subprocess.STDOUT, check=True, timeout=14400)
             self.update(ident, message='正在校验并打包三维结果')
             from package_result import package
             package(folder/'source.mp4', work/'reconstruction.npz', work/'result')
@@ -86,6 +86,10 @@ class Library:
                 with (run/'mirror.log').open('w') as log:
                     completed=subprocess.run([sys.executable,str(REPO/'viewer/video_import/estimate_mirror.py'),'--dataset',str(folder),'--result',str(work/'result'),'--model',mirror_model,'--device',os.environ.get('VIEWER_RACKET_DEVICE','mps')],stdout=log,stderr=subprocess.STDOUT,timeout=1800)
                 write_record(work/'result/mirror_generation_status.json',{'status':'ready' if completed.returncode==0 else 'needs_review','exit_code':completed.returncode})
+            if (work/'result/multiview_manifest.json').exists() and json.loads((work/'result/mesh_meta.json').read_text()).get('mirror_available'):
+                self.update(ident,message='正在校验镜中 3D 与握拍约束')
+                with (run/'multiview.log').open('w') as log:
+                    subprocess.run([sys.executable,str(REPO/'viewer/video_import/multiview_constraints.py'),'--dataset',str(folder),'--result',str(work/'result')],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1800)
             if racket_model:
                 self.update(ident,message='正在检测原分辨率局部拍框')
                 with (run/'racket_roi.log').open('w') as log:
@@ -198,7 +202,16 @@ class Handler(SimpleHTTPRequestHandler):
                 value=json.loads(self.rfile.read(size));meta=json.loads((folder/'result/mesh_meta.json').read_text())
                 if value.get('video_sha256')!=meta['video_sha256'] or value.get('image_size')!=meta['image_size']:raise ValueError('标记属于其他视频')
                 from mirror_calibration import corners,apply
-                if action=='calibration':return self.json(apply(folder,value))
+                if action=='calibration':
+                    report=apply(folder,value)
+                    if meta.get('multiview_inference_available'):
+                        from multiview_constraints import run as constrain
+                        constrain(folder)
+                        if (folder/'result/racket_poses_wrist.json').exists():
+                            from fit_dataset_grip import fit_dataset
+                            fit_dataset(folder)
+                        report['multiview_updated']=True
+                    return self.json(report)
                 for part in ('ground','mirror'):
                     row=value.get(part,{})
                     if row.get('points'):
@@ -206,6 +219,7 @@ class Handler(SimpleHTTPRequestHandler):
                         if type(row.get('frame')) is not int or not 0<=row['frame']<meta['frames']:raise ValueError('标记帧号无效')
                 write_record(folder/'result/calibration_annotations.json',value)
                 meta['mirror_available']=False
+                meta['multiview_refined_available']=False
                 write_record(folder/'result/mesh_meta.json',meta)
                 return self.json({'saved':True})
             if route.path == '/api/videos':

@@ -28,6 +28,14 @@ def fit_dataset(folder,result=None):
     archive=folder/'attempts'/f'{attempt:04d}'/'work/reconstruction.npz'
     with np.load(archive,allow_pickle=False) as d:
         frames=[{'raw':p} for p in d['joints']]
+        joint_shape=d['joints'].shape
+    constraints=root/'multiview_constraints.npz';multiview_frames=0
+    if constraints.exists() and meta.get('multiview_refined_available'):
+        report=read('multiview_constraints_report.json')
+        if report['constraints_sha256']!=sha256(constraints) or report['archive_sha256']!=sha256(archive):raise ValueError('多视角约束哈希不一致')
+        with np.load(constraints,allow_pickle=False) as d:
+            if str(d['video_sha256'])!=meta['video_sha256'] or str(d['geometry_sha256'])!=sha256(root/'mirror_geometry.json') or d['joints'].shape!=joint_shape or not np.isfinite(d['joints']).all():raise ValueError('多视角握拍约束来源无效')
+            frames=[{'raw':p} for p in d['joints']];multiview_frames=int(d['accepted'].sum())
     detections=read('racket_candidates.json')['frames'] if (root/'racket_candidates.json').exists() else [{'candidates':[]} for _ in frames]
     if len(detections)!=len(frames) or len(old['frames'])!=len(frames):raise ValueError('球拍观测帧数不一致')
     if (root/'racket_candidates.json').exists() and read('racket_candidates.json')['video_sha256']!=meta['video_sha256']:raise ValueError('镜中球拍观测来源不一致')
@@ -179,7 +187,7 @@ def fit_dataset(folder,result=None):
     out['summary'].update(motion_metrics(rs));out['stability']={'before':before_stability,'after':motion_metrics(rs),'method':'SO3 angular acceleration, confidence weighted; robust hand axes; .6s bracketed gap support','fps':meta['fps']}
     out['observation_resolution']=roi['original_size'] if roi else size
     visible=[r for r in rows if r['status']=='fitted']
-    out['summary'].update(palm_anchor_max_mm=max(r['palm_anchor_error_m'] for r in visible)*1000,shaft_error_median_deg=float(np.median([r['grip_axis_error_deg'] for r in visible])),rotation_step_p95_deg=float(np.percentile([r['rotation_step_deg'] for r in visible],95)))
+    out['summary'].update(palm_anchor_max_mm=max(r['palm_anchor_error_m'] for r in visible)*1000,shaft_error_median_deg=float(np.median([r['grip_axis_error_deg'] for r in visible])),rotation_step_p95_deg=float(np.percentile([r['rotation_step_deg'] for r in visible],95)),multiview_hand_frames=multiview_frames)
     out['residual_pixel_units']='1280px canonical width; resolution-independent thresholds'
     for row in rows:
         row['projected_head_outline']=(np.asarray(row['projected_head_outline'])*pixel_scale).tolist()

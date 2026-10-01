@@ -1,5 +1,5 @@
 """Durable per-video GPU jobs over private SSH; no public HTTP listener."""
-import argparse,json,os,re,subprocess,sys,time
+import argparse,json,os,re,subprocess,sys,time,shutil
 from pathlib import Path
 from run_records import sha256,write,now
 
@@ -14,7 +14,17 @@ def execute(root,job):
     try:
         if manifest['source_sha256']!=request['source_sha256']:raise ValueError('Input hash mismatch')
         env={**os.environ,**cfg['env'],'VIEWER_REQUIRE_CUDA':'1'}
-        subprocess.run([sys.executable,str(Path(__file__).with_name('generate_sam.py')),'--video',str(base/'source.mp4'),'--output',str(base/'work')],env=env,check=True,timeout=6800)
+        parent=request.get('base_job_id')
+        if parent:
+            previous=folder(root,parent);prior=json.loads((previous/'run_manifest.json').read_text())
+            if prior['status']!='ready' or prior['source_sha256']!=manifest['source_sha256']:raise ValueError('Reuse requires same video hash and a ready cloud job')
+            if sha256(previous/'work/reconstruction.npz')!=prior['artifact_sha256']['reconstruction.npz']:raise ValueError('Parent artifact hash mismatch')
+            (base/'work').mkdir(exist_ok=True);shutil.copy2(previous/'work/reconstruction.npz',base/'work/reconstruction.npz');write(base/'work/inference_manifest.json',{**prior['inference'],'primary_reused_from_job':parent,'reuse_source_sha256':manifest['source_sha256']})
+        else:
+            subprocess.run([sys.executable,str(Path(__file__).with_name('generate_sam.py')),'--video',str(base/'source.mp4'),'--output',str(base/'work')],env=env,check=True,timeout=6800)
+        if env.get('VIEWER_MULTIVIEW')=='1':
+            subprocess.run([sys.executable,str(Path(__file__).with_name('generate_multiview.py')),'--video',str(base/'source.mp4'),'--output',str(base/'work')],env=env,check=True,timeout=6800)
+            manifest['multiview']=json.loads((base/'work/multiview_manifest.json').read_text())
         manifest['artifact_sha256']={'reconstruction.npz':sha256(base/'work/reconstruction.npz')}
         inference=base/'work/inference_manifest.json'
         if inference.exists():manifest['inference']=json.loads(inference.read_text())
@@ -32,7 +42,12 @@ def main():
         cfg=json.loads((a.root/'worker_config.json').read_text());os.environ.update(cfg['env'])
         from generate_sam import requirements
         import torch
-        print(json.dumps({'cuda':torch.cuda.is_available(),'missing':requirements(),'git_commit':cfg['git_commit']}));return
+        missing=requirements()
+        if cfg['env'].get('VIEWER_MULTIVIEW')=='1':
+            import importlib.util
+            if importlib.util.find_spec('sam2') is None:missing.append('sam2 python package')
+            if not Path(cfg['env'].get('VIEWER_SAM2_WEIGHTS','')).is_file():missing.append('VIEWER_SAM2_WEIGHTS')
+        print(json.dumps({'cuda':torch.cuda.is_available(),'missing':missing,'git_commit':cfg['git_commit']}));return
     base=folder(a.root,a.job)
     if a.action=='status':print((base/'status.json').read_text());return
     if a.action=='start':

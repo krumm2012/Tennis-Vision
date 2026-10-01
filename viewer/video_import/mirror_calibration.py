@@ -53,7 +53,9 @@ def apply_geometry(folder,geometry,bundle=None,result=None):
     evidence=json.loads((out/'person_candidates.json').read_text())
     if evidence['video_sha256']!=meta['video_sha256']:raise ValueError('人物遮罩候选不属于当前视频')
     record=json.loads((folder/'record.json').read_text());archive=folder/'attempts'/f"{record['attempt']:04d}"/'work/reconstruction.npz'
-    with np.load(archive,allow_pickle=False) as d:vertices=d['vertices'].copy()
+    with np.load(archive,allow_pickle=False) as d:
+        vertices=d['vertices'].copy();sam2=d['masks_mirror_sam2'].copy() if 'masks_mirror_sam2' in d else None
+    if sam2 is not None and (sam2.ndim!=3 or len(sam2)!=meta['frames'] or sam2.dtype!=np.uint8):raise ValueError('镜中 SAM2 数据无效')
     atlas=cv2.imread(str(out/'person_masks_sam2.png'));cols,rows=meta['mask_atlas_grid'];tw=atlas.shape[1]//cols;th=atlas.shape[0]//rows;atlas[:,:,1]=0;n=np.array(geometry['normal_camera']);distance=geometry['distance_camera_m'];stats=json.loads((out/'person_masks_sam2_stats.json').read_text());accepted=[];size=np.array(meta['image_size'])
     def iou(a,b):
         inter=np.maximum(np.minimum(a[2:],b[2:])-np.maximum(a[:2],b[:2]),0).prod();return inter/max(np.maximum(a[2:]-a[:2],0).prod()+np.maximum(b[2:]-b[:2],0).prod()-inter,1)
@@ -62,14 +64,24 @@ def apply_geometry(folder,geometry,bundle=None,result=None):
         mask=np.zeros((int(size[1]),int(size[0])),np.uint8);valid=False
         if np.all(ref[:,2]>.1):
             p=ref[:,:2]/ref[:,2:]*meta['focal'][i]+size/2;box=np.r_[p.min(0),p.max(0)];real=x[:,:2]/x[:,2:]*meta['focal'][i]+size/2;realbox=np.r_[real.min(0),real.max(0)]
-            options=[(iou(box,np.array(c['box'])),c) for c in frame['persons'] if iou(realbox,np.array(c['box']))<.25]
-            if options:
-                score,c=max(options,key=lambda a:a[0])
-                if score>.15:cv2.fillPoly(mask,[np.asarray(c['polygon'],np.int32)],255);valid=True
-        tile=cv2.resize(mask,(tw,th),interpolation=cv2.INTER_AREA);atlas[i//cols*th:(i//cols+1)*th,i%cols*tw:(i%cols+1)*tw,1]=tile;stats[i]['mirror']=float((tile>140).mean());accepted.append({'accepted':valid,'source':'paired_ground_mask_association'})
+            if sam2 is not None:
+                ys,xs=np.where(sam2[i]>140)
+                if len(xs):
+                    detected=np.array([xs.min(),ys.min(),xs.max()+1,ys.max()+1])*np.tile(size/np.array(sam2.shape[2:0:-1]),2)
+                    if iou(box,detected)>.15 and iou(realbox,detected)<.25:mask=sam2[i];valid=True
+            else:
+                options=[(iou(box,np.array(c['box'])),c) for c in frame['persons'] if iou(realbox,np.array(c['box']))<.25]
+                if options:
+                    score,c=max(options,key=lambda a:a[0])
+                    if score>.15:cv2.fillPoly(mask,[np.asarray(c['polygon'],np.int32)],255);valid=True
+        tile=cv2.resize(mask,(tw,th),interpolation=cv2.INTER_AREA);atlas[i//cols*th:(i//cols+1)*th,i%cols*tw:(i%cols+1)*tw,1]=tile;stats[i]['mirror']=float((tile>140).mean());accepted.append({'accepted':valid,'source':'SAM2_video_propagation' if sam2 is not None else 'paired_ground_mask_association'})
     if not any(row['accepted'] for row in accepted):raise ValueError('镜面拟合通过，但未匹配到镜中人物遮罩；请复核配对点和实测尺寸')
     path=out/'person_masks_sam2.pending.png'
     if not cv2.imwrite(str(path),atlas):raise ValueError('遮罩保存失败')
-    path.replace(out/'person_masks_sam2.png');write(out/'mirror_geometry.json',geometry);write(out/'mirror_geometry_frames.json',accepted);write(out/'person_masks_sam2_stats.json',stats);meta['mirror_available']=True;write(out/'mesh_meta.json',meta)
+    geometry['mask_frames']=sum(r['accepted'] for r in accepted)
+    path.replace(out/'person_masks_sam2.png');write(out/'mirror_geometry.json',geometry);write(out/'mirror_geometry_frames.json',accepted);write(out/'person_masks_sam2_stats.json',stats);meta['mirror_available']=True;meta['multiview_refined_available']=False;write(out/'mesh_meta.json',meta)
     if bundle:write(out/'paired_ground_calibration.json',bundle);write(out/'ground_calibration.json',bundle['ground']);write(out/'mirror_ground_grid.json',bundle['mirror'])
-    geometry['mask_frames']=sum(r['accepted'] for r in accepted);write(out/'mirror_calibration_report.json',geometry);return geometry
+    quality=out/'quality_report.json'
+    if quality.exists():
+        report=json.loads(quality.read_text());report.update(mirror_available=True,mirror_mask_frames=geometry['mask_frames'],mask_method=meta.get('mask_method','YOLO_polygon'));write(quality,report)
+    write(out/'mirror_calibration_report.json',geometry);return geometry

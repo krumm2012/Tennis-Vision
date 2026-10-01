@@ -8,13 +8,14 @@ from run_records import revision,write,sha256
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--config',required=True);a=p.parse_args();c=config(a.config)
-    allowed={'SAM3D_BODY_CODE','SAM3D_WEIGHTS','SAM3D_FACES','VIEWER_SEGMENTATION_WEIGHTS'}
+    allowed={'SAM3D_BODY_CODE','SAM3D_WEIGHTS','SAM3D_FACES','VIEWER_SEGMENTATION_WEIGHTS','VIEWER_SAM2_WEIGHTS','VIEWER_MULTIVIEW'}
     env=c.get('env',{})
-    if set(env)-allowed or not all(isinstance(v,str) and v.startswith('/') for v in env.values()):raise ValueError('env 只能包含四个模型配置绝对路径')
+    if set(env)-allowed or not all(isinstance(v,str) and (v in ['0','1'] if k=='VIEWER_MULTIVIEW' else v.startswith('/')) for k,v in env.items()):raise ValueError('env 只能包含模型配置绝对路径和 VIEWER_MULTIVIEW=0/1')
     if not {'SAM3D_BODY_CODE','SAM3D_WEIGHTS','VIEWER_SEGMENTATION_WEIGHTS'}<=set(env):raise ValueError('请配置 SAM 源码、权重和分割模型路径')
+    if env.get('VIEWER_MULTIVIEW')=='1' and not env.get('VIEWER_SAM2_WEIGHTS'):raise ValueError('双视角生成需要 SAM2 权重路径')
     ssh(c,['mkdir','-p',c['root']+'/code',c['root']+'/jobs'])
     hashes={}
-    for source in [Path(__file__).with_name('worker.py'),ROOT/'viewer/video_import/generate_sam.py',ROOT/'viewer/video_import/run_records.py']:
+    for source in [Path(__file__).with_name('worker.py'),ROOT/'viewer/video_import/generate_sam.py',ROOT/'viewer/video_import/run_records.py',ROOT/'viewer/video_import/generate_multiview.py']:
         hashes[source.name]=sha256(source)
         copy(c,source,c['root']+'/code/'+source.name,upload=True)
     with tempfile.TemporaryDirectory() as d:

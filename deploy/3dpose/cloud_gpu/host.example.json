@@ -6,6 +6,8 @@
   "env": {
     "SAM3D_BODY_CODE": "/workspace/sam-3d-body",
     "SAM3D_WEIGHTS": "/workspace/weights",
-    "VIEWER_SEGMENTATION_WEIGHTS": "/workspace/models/yolo11n-seg.pt"
+    "VIEWER_SEGMENTATION_WEIGHTS": "/workspace/models/yolo11n-seg.pt",
+    "VIEWER_SAM2_WEIGHTS": "/workspace/sam2/checkpoints/sam2.1_hiera_small.pt",
+    "VIEWER_MULTIVIEW": "1"
   }
 }
