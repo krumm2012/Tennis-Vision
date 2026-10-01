@@ -10,6 +10,7 @@ def main():
     assets={
       'import.html':ROOT/'viewer/video_import/import.html',
       'assets/dataset_racket.js':ROOT/'viewer/video_import/dataset_racket.js',
+      'assets/dataset_racket_review.js':ROOT/'viewer/video_import/dataset_racket_review.js',
       'assets/dataset_tools.js':ROOT/'viewer/video_import/dataset_tools.js',
       'assets/mesh_renderer.js':ROOT/'viewer/sam3d/mesh_renderer.js',
       'assets/coaching.js':ROOT/'viewer/sam3d/coaching.js',

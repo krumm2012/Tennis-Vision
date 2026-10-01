@@ -139,3 +139,8 @@ commands, NPZ fields, actual run hashes and acceptance metrics. With
 channels contain real/mirror SAM2 video propagation; YOLO only supplies prompts.
 The default demo remains available. Changed mirror annotations invalidate the
 previous hand constraints; recalibration recomputes matching constraints and racket fit.
+
+## 拍柄关键点与方向校准迭代
+
+当前自动几何关键点、镜面射线、留出验证、稀疏校准 API 和实际限制见
+[RACKET_DIRECTION_ITERATION.md](RACKET_DIRECTION_ITERATION.md)。

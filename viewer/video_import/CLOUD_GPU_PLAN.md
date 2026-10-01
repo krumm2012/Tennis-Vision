@@ -123,3 +123,8 @@ python3 -B -m unittest discover -s viewer/video_import -p 'test_*.py' -v
 实际镜中 SAM3D、SAM2 安装/权重路径、执行命令、NPZ 契约及当前验收见
 [MULTIVIEW_GPU_ITERATION.md](MULTIVIEW_GPU_ITERATION.md)。原始视频保存为
 `original.video`（不对浏览器公开），标准化和推理输入统一为 25 fps、最大宽度 2560。
+
+## 拍柄关键点与方向校准迭代
+
+当前自动几何关键点、镜面射线、留出验证、稀疏校准 API 和实际限制见
+[RACKET_DIRECTION_ITERATION.md](RACKET_DIRECTION_ITERATION.md)。

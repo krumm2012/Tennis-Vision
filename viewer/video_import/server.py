@@ -6,7 +6,7 @@ It receives --video PATH --output DIR and must export reconstruction.npz.
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import argparse, json, os, re, shutil, subprocess, threading, time, uuid, sys
+import argparse, json, os, re, shutil, subprocess, threading, time, uuid, sys, tempfile
 from run_records import sha256,write as write_record,now,revision
 from urllib.parse import urlsplit, parse_qs
 
@@ -95,6 +95,8 @@ class Library:
                 with (run/'racket_roi.log').open('w') as log:
                     subprocess.run([sys.executable,str(REPO/'viewer/video_import/racket_observations.py'),'--dataset',str(folder),'--result',str(work/'result'),'--model',racket_model,'--device',os.environ.get('VIEWER_RACKET_DEVICE','mps')],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1800)
                 self.update(ident,message='正在修正掌内握拍与拍面角度')
+                from racket_keypoints import build as build_keypoints
+                build_keypoints(folder,work/'result')
                 with (run/'grip.log').open('w') as log:
                     subprocess.run([sys.executable,str(REPO/'viewer/video_import/fit_dataset_grip.py'),'--dataset',str(folder),'--result',str(work/'result')],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1800)
             remote=work/'remote_manifest.json'
@@ -161,13 +163,14 @@ class Handler(SimpleHTTPRequestHandler):
         elif route.startswith('/assets/'):
 
             name = route.removeprefix('/assets/')
-            if name in ('dataset_tools.js','dataset_racket.js'):path=REPO/'viewer/video_import'/name
+            if name in ('dataset_tools.js','dataset_racket.js','dataset_racket_review.js'):path=REPO/'viewer/video_import'/name
             elif name in ('coaching.js','mesh_renderer.js','vendor/three-0.180.0.min.js'):path=REPO/'viewer/sam3d'/name
             else:return self.send_error(404)
         else:
             match = re.fullmatch(r'/datasets/([0-9a-f]{32})/(source.mp4|result/[a-zA-Z0-9_.-]+)',route)
             if not match: return self.send_error(404)
             path = self.server.library.folder(match[1])/match[2]
+            if path.suffix not in {'.html','.json','.bin','.mp4','.png'}:return self.send_error(404)
         if not path.is_file() or (path.is_symlink() and not route.startswith('/default/')): return self.send_error(404)
         # Range support for video seeking and streamed mesh frames.
         size=path.stat().st_size; start=0;end=size-1;partial=False
@@ -193,14 +196,30 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.allowed(): return self.json({'error':'仅允许本地访问'},403)
         route=urlsplit(self.path)
         try:
-            edit=re.fullmatch(r'/api/videos/([0-9a-f]{32})/(annotations|calibration)',route.path)
+            edit=re.fullmatch(r'/api/videos/([0-9a-f]{32})/(annotations|calibration|racket-landmarks)',route.path)
             if edit:
                 ident,action=edit.groups();folder=self.server.library.folder(ident)
                 if self.server.library.read(ident)['status']!='ready':raise ValueError('请先完成视频生成')
                 size=int(self.headers.get('Content-Length','0'))
-                if not 0<size<=65536:raise ValueError('标记 JSON 大小无效')
+                if not 0<size<=(1048576 if action=='racket-landmarks' else 65536):raise ValueError('标记 JSON 大小无效')
                 value=json.loads(self.rfile.read(size));meta=json.loads((folder/'result/mesh_meta.json').read_text())
                 if value.get('video_sha256')!=meta['video_sha256'] or value.get('image_size')!=meta['image_size']:raise ValueError('标记属于其他视频')
+                if action=='racket-landmarks':
+                    from racket_landmarks import validate
+                    from fit_dataset_grip import fit_dataset
+                    reviewed=validate(value,meta)
+                    # Fit in a private staging folder. A failed calibration preserves the live poses.
+                    with self.server.library.lock,tempfile.TemporaryDirectory(prefix='racket-review-',dir=folder) as temp:
+                        stage=Path(temp)/'result'
+                        def clone(source,destination):
+                            if Path(source).suffix in ['.bin','.mp4','.png','.npz']:Path(destination).hardlink_to(source)
+                            else:shutil.copy2(source,destination)
+                        shutil.copytree(folder/'result',stage,copy_function=clone);write_record(stage/'racket_landmarks.json',reviewed)
+                        fit_dataset(folder,stage)
+                        changed=['racket_landmarks.json','racket_poses.json','wilson_grasp_calibration.json','wilson_model.json','grip_fit_manifest.json','racket_poses_directional.json','racket_poses_reference.json','racket_quality_gate.json']
+                        for name in changed:
+                            if (stage/name).exists():(stage/name).replace(folder/'result'/name)
+                    return self.json({'saved':True,'frames':len(reviewed['frames']),'direction_status':json.loads((folder/'result/racket_quality_gate.json').read_text())['status'] if (folder/'result/racket_quality_gate.json').exists() else 'provisional'})
                 from mirror_calibration import corners,apply
                 if action=='calibration':
                     report=apply(folder,value)

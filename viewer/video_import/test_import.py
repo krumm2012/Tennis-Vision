@@ -69,5 +69,13 @@ class ImportTests(unittest.TestCase):
   self.assertEqual(self.library.read(item['id'])['status'],'failed')
   folder=self.library.folder(item['id']);path=folder/'attempts/0001/run_manifest.json';self.assertEqual(json.loads(path.read_text())['status'],'failed')
   self.library.update(item['id'],status='generating');other=Library(self.library.root,[]);self.assertEqual(other.read(item['id'])['status'],'failed');self.assertEqual(json.loads(path.read_text())['error_type'],'ServiceRestart');other.pool.shutdown()
+ def test_racket_review_failure_preserves_live_annotations_and_poses(self):
+  status,body=self.request('POST','/api/videos?name=review.mp4',self.video.read_bytes());item=json.loads(body);folder=self.library.folder(item['id']);out=folder/'result';out.mkdir();self.library.update(item['id'],status='ready')
+  meta={'video_sha256':'same','image_size':[64,48],'fps':25,'frames':3};(out/'mesh_meta.json').write_text(json.dumps(meta));(out/'racket_poses.json').write_text('original-poses');(out/'racket_landmarks.json').write_text('original-review')
+  value={**meta,'frames':[{'frame':1,'points':{'tip':[30,20]}}]}
+  with patch('fit_dataset_grip.fit_dataset',side_effect=ValueError('拟合未通过')):
+   status,_=self.request('POST','/api/videos/'+item['id']+'/racket-landmarks',json.dumps(value))
+  self.assertEqual(status,400);self.assertEqual((out/'racket_poses.json').read_text(),'original-poses');self.assertEqual((out/'racket_landmarks.json').read_text(),'original-review')
+  (out/'private.npz').write_bytes(b'private');status,_=self.request('GET','/datasets/'+item['id']+'/result/private.npz');self.assertEqual(status,404)
 
 if __name__=='__main__':unittest.main()

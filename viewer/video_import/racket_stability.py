@@ -12,7 +12,7 @@ def smooth_vectors(values,fps):
     robust=median_filter(values,size=(3,1),mode='nearest')
     return savgol_filter(robust,window,2,axis=0,mode='interp')
 
-def stable_rotations(matrices,weights,fps):
+def stable_rotations(matrices,weights,fps,acceleration_strength=5):
     """Fit on SO(3), penalizing angular acceleration, not matrix components.
 
     Constant angular velocity has zero acceleration. Low-evidence frames may
@@ -26,7 +26,7 @@ def stable_rotations(matrices,weights,fps):
         anchor=Rotation.from_matrix(np.einsum('nji,njk->nik',matrices,rs)).as_rotvec()*weights[:,None]
         # Spatial (camera-frame) angular increments avoid changing local axes.
         velocity=Rotation.from_matrix(np.einsum('nij,nkj->nik',rs[1:],rs[:-1])).as_rotvec()
-        return np.r_[anchor.ravel(),(.5*scale*velocity).ravel(),(5*scale**2*np.diff(velocity,axis=0)).ravel()]
+        return np.r_[anchor.ravel(),(.5*scale*velocity).ravel(),(acceleration_strength*scale**2*np.diff(velocity,axis=0)).ravel()]
     sparsity=lil_matrix((count*3+(count-1)*3+(count-2)*3,count*3),dtype=int)
     for i in range(count):sparsity[3*i:3*i+3,3*i:3*i+3]=1
     start=count*3
