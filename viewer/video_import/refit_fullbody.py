@@ -92,16 +92,28 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
                     if view=='mirror_points':points=points-2*((points@n-mirror['distance_camera_m'])[:,None])*n
                     uv=project(points[None],focal[i:i+1])[0]
                     evidence_weight=1. if manual[i].get('source')=='manual_review' else .3
-                    loss+=evidence_weight*torch.nn.functional.smooth_l1_loss(uv[ids]/pixel_scale,tensor([seen[names[k]] for k in ids])/pixel_scale,beta=4)/10
+                    weights=manual[i].get('weights',{}).get(view,{})
+                    w=tensor([weights.get(names[k],evidence_weight) for k in ids])
+                    observed=tensor([seen[names[k]] for k in ids])/pixel_scale
+                    predicted=uv[ids]/pixel_scale
+                    residual=torch.nn.functional.smooth_l1_loss(predicted,observed,beta=4,reduction='none').mean(-1)*w
+                    if {'rim_side','rim_opposite'}<=set(seen) and not manual[i].get('face_correspondence_confirmed'):
+                        u=ids.index(3);v=ids.index(4)
+                        swapped=torch.nn.functional.smooth_l1_loss(predicted[[u,v]],observed[[v,u]],beta=4,reduction='none').mean(-1)*w[[u,v]]
+                        loss+=(residual.sum()-residual[[u,v]].sum()+torch.minimum(residual[[u,v]].sum(),swapped.sum()))/len(ids)/10
+                    else:loss+=residual.mean()/10
                     if {'handle_end','tip'}<=set(seen):
                         endpoints=tensor([seen['handle_end'],seen['tip']])
                         if torch.linalg.vector_norm(endpoints[1]-endpoints[0])>=4:
-                            loss+=evidence_weight*directed_image_loss(uv[[0,2]],endpoints)*.4
+                            loss+=min(weights.get('handle_end',evidence_weight),weights.get('tip',evidence_weight))*directed_image_loss(uv[[0,2]],endpoints)*.4
             scaled=loss*(b-a)/count
             if not torch.isfinite(scaled):raise ValueError('联合拟合出现非有限残差；候选未保存')
             scaled.backward();total+=float(scaled.detach())
         temporal=(delta[2:]-2*delta[1:-1]+delta[:-2]).square().mean()*.5
         temporal+=(racket_delta[2:]-2*racket_delta[1:-1]+racket_delta[:-2]).square().mean()*.5
+        actual_r=rotation_vector_matrix(racket_delta[:,:3])@r0
+        velocity=actual_r[1:]@actual_r[:-1].transpose(-1,-2)
+        temporal+=(velocity[1:]-velocity[:-1]).square().mean()*10
         temporal.backward();optimizer.step()
         if iteration%20==0:print(f'MHR joint iteration {iteration}: {total:.5f}',flush=True)
     out={};vertices=[];joints=[];parameters=[];rotations=[];translations=[]
@@ -111,13 +123,19 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
             for target,value in [(vertices,v),(joints,j),(parameters,p),(rotations,r),(translations,t)]:target.append(value.cpu().numpy())
     out.update(vertices=np.concatenate(vertices),joints=np.concatenate(joints),mhr_model_params=np.concatenate(parameters),
                racket_rotation=np.concatenate(rotations),racket_translation=np.concatenate(translations),source_roots=data['source_roots'])
+    def resolved_rims(uv,seen,row):
+        if {'rim_side','rim_opposite'}<=set(seen) and not row.get('face_correspondence_confirmed'):
+            a=np.array([seen['rim_side'],seen['rim_opposite']]);pred=uv[[3,4]]
+            if np.linalg.norm(pred-a[::-1],axis=1).sum()<np.linalg.norm(pred-a,axis=1).sum():return {**seen,'rim_side':seen['rim_opposite'],'rim_opposite':seen['rim_side']}
+        return seen
     def rms(rot,trans,indices):
         errors=[]
         for i in indices:
             points=objects.cpu().numpy()@rot[i].T+trans[i]
             uv=points[:,:2]/points[:,2:]*meta['focal'][i]+np.asarray(meta['image_size'])/2
+            seen=resolved_rims(uv,manual[i]['points'],manual[i])
             for k,name in enumerate(names):
-                if name in manual[i]['points']:errors.append(np.linalg.norm(uv[k]-manual[i]['points'][name]))
+                if name in seen:errors.append(np.linalg.norm(uv[k]-seen[name]))
         return float(np.median(errors))/(meta['image_size'][0]/1280)
     before=rms(r0.cpu().numpy(),t0.cpu().numpy(),heldout);after=rms(out['racket_rotation'],out['racket_translation'],heldout)
     displacement=np.linalg.norm(out['vertices']-data['vertices'],axis=-1)
@@ -133,6 +151,7 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
                 if view=='mirror_points':
                     normal=np.array(mirror['normal_camera']);points-=2*(points@normal-mirror['distance_camera_m'])[:,None]*normal
                 uv=points[:,:2]/points[:,2:]*meta['focal'][i]+np.asarray(meta['image_size'])/2
+                seen=resolved_rims(uv,seen,manual[i])
                 for k,name in enumerate(names):
                     if name in seen:errors.append(float(np.linalg.norm(uv[k]-seen[name])/pixel_scale))
                 if {'handle_end','tip'}<=set(seen):
@@ -145,9 +164,11 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
     heldout_after=observation_diagnostics(out['racket_rotation'],out['racket_translation'],heldout)
     observation_gate=all(heldout_after[k]['p95']<=v['p95']+1e-3 for k,v in heldout_before.items() if v['samples'])
     contact_gate=all(after_contact[k]['p95']<=before_contact[k]['p95']+1e-3 for k in ['palm_gap_mm','finger_radial_gap_mm','handle_segment_gap_mm','hand_shaft_deg','rotation_step_deg','angular_acceleration_deg_frame2'])
-    report={'objective_version':'joint_grip_direction_v2','contact_before':before_contact,'contact_after':after_contact,
+    report={'objective_version':'confidence_observations_v3','contact_before':before_contact,'contact_after':after_contact,
             'contact_and_direction_gate_passed':bool(contact_gate),'heldout_observation_gate_passed':bool(observation_gate),
             'heldout_observations_before':heldout_before,'heldout_observations_after':heldout_after,'hand_prior_downweighted_frames':int((hand_weight<1).sum()),
+            'observation_policy':'manual frames replace auto; per-point confidence/uncertainty; heldout frames excluded; unverified rim sides unordered',
+            'manual_observation_frames':sum(r.get('source')=='manual_review' for r in marks['frames']),
             'train_frames':sorted(train),'heldout_frames':sorted(heldout),
             'native_replay_mesh_max_m':max(mesh_error),'native_replay_joint_max_m':max(joint_error),
             'heldout_landmark_before_canonical_px':before,'heldout_landmark_after_canonical_px':after,
@@ -161,23 +182,8 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
 
 
 def prepare_observations(result,readiness):
-    out=Path(result);observations={}
-    if readiness.get('automatic_frames'):
-        kp=json.loads((out/'racket_keypoints.json').read_text());selection=json.loads((out/'racket_review_frames.json').read_text())
-        if kp['video_sha256']!=readiness['video_sha256'] or sha256(out/'racket_keypoints.json')!=selection['keypoints_sha256']:raise ValueError('自动关键帧观测版本不一致')
-        for row in selection['frames']:
-            i=row['frame'];source=kp['frames'][i];seen={'frame':i,'points':{},'mirror_points':{},'source':'automatic_contour_unverified'}
-            for view,target in [('real','points'),('mirror','mirror_points')]:
-                if view in row['views']:seen[target]=source.get(view,{}).get('points',{})
-            observations[i]=seen
-    if (out/'racket_landmarks.json').exists():
-        reviewed=json.loads((out/'racket_landmarks.json').read_text())
-        if reviewed['video_sha256']!=readiness['video_sha256']:raise ValueError('人工标注属于其他视频')
-        for row in reviewed['frames']:
-            existing=observations.setdefault(row['frame'],{'frame':row['frame'],'points':{},'mirror_points':{}})
-            for view in ['points','mirror_points']:existing[view].update(row[view])
-            existing['source']='manual_review'
-    return {'frames':list(observations.values())}
+    from refit_observations import assemble
+    return assemble(result,readiness)
 
 
 def main():
@@ -203,7 +209,7 @@ def main():
     values,report=solve(head,data,meta,poses,marks,read('racket_dimensions.json'),readiness,a.steps)
     if not all(np.isfinite(v).all() for v in values.values()):raise ValueError('联合拟合候选无效；未保存或发布')
     np.savez_compressed(a.output/'mhr_refit_candidate.npz',**values)
-    report.update(video_sha256=meta['video_sha256'],source_archive_sha256=sha256(a.archive),candidate_sha256=sha256(a.output/'mhr_refit_candidate.npz'),code_sha256=sha256(Path(__file__)),objective_code_sha256=sha256(Path(__file__).with_name('grip_objective.py')))
+    report.update(video_sha256=meta['video_sha256'],source_archive_sha256=sha256(a.archive),candidate_sha256=sha256(a.output/'mhr_refit_candidate.npz'),code_sha256=sha256(Path(__file__)),objective_code_sha256=sha256(Path(__file__).with_name('grip_objective.py')),observations_code_sha256=sha256(Path(__file__).with_name('refit_observations.py')))
     write(a.output/'refit_report.json',report);print(json.dumps(report))
 
 

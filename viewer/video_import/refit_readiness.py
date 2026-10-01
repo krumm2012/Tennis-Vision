@@ -35,10 +35,14 @@ def assess(result, archive, allow_assumed=False, allow_automatic=False):
     if not native:reasons.append('native_mhr_parameters_missing_rerun_required')
     evidence=clear if len(clear)>=6 else automatic
     heldout=evidence[::5]
+    training=set(evidence)|{r['frame'] for r in marks}
+    if allow_automatic and (out/'racket_keypoints.json').exists():
+        from refit_observations import automatic_rows
+        training.update(automatic_rows(out,meta['video_sha256'],heldout))
     return {'schema_version':1,'video_sha256':meta['video_sha256'],'ready':not reasons,
             'blocked_by':reasons,'reviewed_real_frames':clear,'reviewed_mirror_frames':mirror,
-            'automatic_frames':automatic,'validation_source':'reviewed_landmarks' if len(clear)>=6 else 'automatic_contours_unverified',
-            'train_frames':[i for i in evidence if i not in heldout], 'heldout_frames':heldout,
+            'automatic_evidence_permitted':bool(allow_automatic),'automatic_frames':automatic,'validation_source':'reviewed_landmarks' if len(clear)>=6 else 'automatic_contours_unverified',
+            'train_frames':sorted(training-set(heldout)), 'heldout_frames':heldout,
             'assumed_dimensions_permitted':bool(allow_assumed),'size_measured':bool(size and size['size_ready']),'native_mhr_parameters_available':native,
             'grip_style':size['grip_style'] if size else 'unknown','physical_grip_bevel_verified':False,
             'camera_calibrated':False,'full_body_joint_fit_completed':False,

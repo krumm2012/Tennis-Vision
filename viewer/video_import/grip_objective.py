@@ -29,9 +29,9 @@ def grip_terms(world, rotation, translation, grip, radius, hand_weight, handle_l
     contact=F.smooth_l1_loss(radial,torch.full_like(radial,radius),beta=.005,reduction='none').mean(1)
     axial=(F.relu(-local[:,:,1])+F.relu(local[:,:,1]-handle_length)).mean(1)
     directed=1-(rotation[:,:,1]*axis).sum(-1).clamp(-1,1)
-    return {'anchor':((anchor-center)**2).mean()*1200,
-            'finger_distance':contact.mean()*2,
-            'handle_segment':axial.mean()*2,
+    return {'anchor':(((anchor-center)**2).mean(-1)*(.25+hand_weight)).mean()*600,
+            'finger_distance':(contact*(.25+hand_weight)).mean()*2,
+            'handle_segment':(axial*(.25+hand_weight)).mean()*2,
             'hand_direction':(directed*hand_weight).mean()*.12}
 
 
@@ -44,16 +44,16 @@ def directed_image_loss(projected,observed):
 def reliability(joints,roots,focal,image_size,marks,train):
     """Downweight a conflicting SAM hand prior using TRAIN evidence only."""
     world=joints+roots[:,None];center,axis,_=hand_geometry(world,.013)
-    weight=torch.ones(len(joints),device=joints.device)
+    weight=torch.full((len(joints),),.1,device=joints.device)
     for row in marks['frames']:
         i=row['frame'];seen=row['points']
         if i not in train or not {'handle_end','tip'}<=set(seen):continue
         p=torch.stack((center[i],center[i]+axis[i]*.2))
-        if torch.any(p[:,2]<=.1):weight[i]=.15;continue
+        if torch.any(p[:,2]<=.1):weight[i]=.03;continue
         uv=p[:,:2]/p[:,2:]*focal[i]+image_size/2
         observed=torch.as_tensor([seen['handle_end'],seen['tip']],device=joints.device,dtype=joints.dtype)
         if torch.linalg.vector_norm(observed[1]-observed[0])<4:continue
-        if directed_image_loss(uv,observed)>.1808479557:weight[i]=.15 # cos(35 degrees)
+        weight[i]=.03 if directed_image_loss(uv,observed)>.1808479557 else .4 # cos(35 degrees)
     return weight
 
 

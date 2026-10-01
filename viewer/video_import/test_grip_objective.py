@@ -28,7 +28,7 @@ class GripObjectiveTests(unittest.TestCase):
 
     def test_heldout_landmarks_cannot_change_training_hand_weights(self):
         j=hand();root=torch.zeros(2,3);f=torch.ones(2)*1000;size=torch.tensor([1280.,720.]);marks={'frames':[{'frame':i,'points':{'handle_end':[100,100],'tip':[0,100]}} for i in range(2)]}
-        weights=reliability(j,root,f,size,marks,{0});self.assertLess(float(weights[0]),1);self.assertEqual(float(weights[1]),1)
+        weights=reliability(j,root,f,size,marks,{0});self.assertLess(float(weights[0]),1);self.assertAlmostEqual(float(weights[1]),.1)
         marks['frames'][1]['points']['tip']=[300,400]
         torch.testing.assert_close(weights,reliability(j,root,f,size,marks,{0}))
 
@@ -54,7 +54,7 @@ class GripObjectiveTests(unittest.TestCase):
         marks={'frames':[{'frame':i,'points':{'handle_end':[640,378.3333333],'tip':[640,606.6666667]},'mirror_points':{},'source':'automatic_contour_unverified'} for i in [0,2]]}
         calibration={'dimensions_cm':{},'measured':False};ready={'train_frames':[0],'heldout_frames':[2],'validation_source':'synthetic_fixture'}
         out,report=solve(Head(),data,meta,poses,marks,calibration,ready,steps=2,device='cpu')
-        self.assertEqual(report['objective_version'],'joint_grip_direction_v2');self.assertFalse(report['published_to_viewer'])
+        self.assertEqual(report['objective_version'],'confidence_observations_v3');self.assertFalse(report['published_to_viewer'])
         self.assertEqual(report['heldout_frames'],[2]);self.assertIn('hand_shaft_deg',report['contact_after'])
         for value in out.values():self.assertTrue(np.isfinite(value).all())
 
