@@ -635,3 +635,40 @@ VIEWER_BASE_IMAGE=nginx:stable-alpine docker compose -p tennis-3dpose-local \
 后续拟合应保持当前纹理/姿态独立版本：复核高置信拍柄端点、拍喉和手指对应；把手部可靠性作为权重而非硬真值；在接触、拍框重投影、有向拍柄与时间连续性上共同优化。继续用固定 heldout 与手部接触/运动指标验收，不能仅靠轮廓或掌心零距离宣布可靠。
 
 本轮实测：浏览器完整页默认多视频合成；第 106 帧正背视角及投影切换可用；HTTP atlas 四个文件均匹配发布清单。图索引重建仍因本机缺少 graphify 模块失败，未把该步骤计为通过。
+
+## grip_refit_v7：手指接触、拍柄方向与拍框观测联合目标
+
+状态（2026-10-01）：代码和本地预检已完成，云 SSH 两次连接均被远端关闭。**尚未执行真实视频的 v7 GPU 拟合，尚无改善结论，也未更新 Viewer 的球拍数据。** `iterations/grip_refit_v7/iteration_manifest.json` 记录 `prepared_gpu_unreachable`；它不是一次已完成 MHR 拟合，不增加已完成/已验收计数。
+
+实现位于 `grip_objective.py` 和 `refit_fullbody.py`：
+
+1. 保留原生 MHR 回放一致性门槛；形状、尺度、相机根节点保持不变，优化骨骼参数和刚性球拍。
+2. 掌内 MCP/PIP 握点拉近之外，对近端关节与假设圆柱的径向距离做双向损失，处理分离与穿入；另限制接触位于有限柄段 `[0, 0.16] m`。
+3. 加入有向 MCP/PIP 拍柄轴损失和观测 `handle_end→tip` 的有向图像损失，180° 反向不再视为等价。关节轴与清晰训练观测冲突超过 35° 时，手部方向权重降为 0.15；保留帧不会参与权重计算。
+4. 拍框仍通过已有可见 tip、rim 和 head_center 等关键点的稳健重投影约束；本轮没有新增独立拍框标注，也没有把不可见端点补成真值。真人、镜中观测分别投影；误差按 1280 宽统一归一化。
+5. 报告分别记录接触与方向前后指标、真人/镜中保留帧误差和运动步进。验收要求既有保留帧改善至少 10%、身体位移 P95 小于 3 cm，并且接触/手部方向/旋转步进/角加速度与保留帧各项 P95 不退步。缺少镜中或有向端点样本时记录零样本，不视为该项已验证。
+6. 接触仍是**近端关节—假设圆柱代理**，不是手部皮肤网格表面接触；标准尺寸不是实测值，真实握柄棱位仍未校准。
+
+固定输入：复用 v6 原生相机重打包的私有 JSON，保存到 `iterations/grip_refit_v7/staged/result/`，不读取用户后来可能编辑的标记。源原生归档 SHA 为 `1121e7d61b5d625cf396694d8fee26904ab1dfea273eef16315f522d0ce36451`。训练零基帧 `[41,65,86,100,174,185,205,236]`，保留帧 `[17,126]`，均为未人工确认的自动轮廓证据。仅两帧保留集不能证明整个视频或其他场景的准确率。
+
+云连接恢复后，先确认没有其他生成作业，再部署并执行：
+
+```sh
+python3 deploy/3dpose/cloud_gpu/deploy.py --config deploy/3dpose/cloud_gpu/host.local.json
+python3 viewer/video_import/run_fullbody_refit.py \
+  --dataset output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v7/staged \
+  --native-output output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v6/native \
+  --output output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v7/gpu-fit \
+  --config deploy/3dpose/cloud_gpu/host.local.json --allow-assumed --allow-automatic
+```
+
+`deploy.py` 已加入 `grip_objective.py`，GPU worker 的代码清单和返回报告记录该文件哈希。运行器会自动写远端 job、完成度和不可变进度事件；返回候选仍保存在私有目录。完成后比较固定保留集、接触和方向报告，再制作包含人体新网格与球拍的新旧对比，进行正背左右斜视和握拍特写检查；通过后才发布。
+
+本地验证命令：
+
+```sh
+python3 -m unittest discover -s viewer/video_import -p test_grip_objective.py -v
+python3 -m unittest discover -s viewer/video_import -p test_refit_inputs.py -v
+```
+
+5 项新增验证涵盖脱手恢复梯度、有限柄段、有向轴、保留集隔离、人体/球拍梯度与 CPU 合成小例子的联合优化完整路径；另有 6 项既有输入/原生回放验证通过。CPU 合成测试不是本视频的真实 MHR 重拟合。图索引重建因缺少 graphify 未完成。
