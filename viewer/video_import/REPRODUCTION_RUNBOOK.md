@@ -838,4 +838,40 @@ for name in ['mesh_refined.bin', 'mesh_meta.json', 'racket_poses.json', 'viewer.
 (root / 'result/joint_preview_manifest.json').unlink(missing_ok=True)
 ```
 
+## v10：连续手方向先验对照（2026-10-01 22:53–22:55，UTC+8）
+
+新会话接续检查 v9 Viewer：从首帧播放后界面到达 249/249 并停止；这证明时间轴可完整推进，不等于逐帧录像审计。保存第 106、116、183 帧的正面、背面、左右、斜视和握拍特写到 `iterations/grip_refit_v10/viewer_review/`，截图 SHA 与局限写入 `review.json`。183 帧拍柄靠近手指，但手形/拍柄方向仍不一致；近距离画面不能证明皮肤接触。页面保持 v9 未验收候选和九视频合成纹理。
+
+热点 zero105/115/182 附近存在真人拍柄点缺失、镜中点增减。另发现旧手方向先验在 35° 处由 .4 跳到 .03。v10 **只**将该角度门控换成 25–45° 间的 smoothstep；清楚一致/冲突的 .4/.03 端点与缺证据的 .1 默认值保留，没有时间平滑或补点。只改变 10 帧先验，保留帧不变，人工标记和自动点权重保持原样。参数区间是实验设定，尚未证明能改善拟合。
+
+云 GPU 无活动计算进程且 `gpu.lock` 可非阻塞取得后部署，执行 job `474e4c2a51874b8aaafdbe9f5163435e`，120 步，候选 SHA `7a1c65a7fd3813f019c2dda6fdfbefa8670d25ff26f952fb504ebe7231eff0bc`。本地/远端/报告哈希已核验；输入继续冻结为 v9 staged，代码保存在 v10 `code_snapshot/`。部署 Git revision 指向此前提交，实际实验代码身份以清单 SHA 为准。
+
+| 指标 | v9 | v10 |
+| --- | ---: | ---: |
+| 角加速度 P95 / °每帧² | 9.236820 | 9.232450 |
+| 旋转步进 P95 / °每帧 | 26.750616 | 26.729008 |
+| 真人保留点误差中位数 / canonical px | 7.626994 | 7.627146 |
+| 掌内握点代理距离中位数 / mm | 4.264485 | 4.239344 |
+| 手/拍柄方向夹角中位数 / ° | 27.126366 | 27.314934 |
+| 身体位移 P95 / mm | 17.528873 | 17.528062 |
+
+结果仍为 **completed_rejected**，未发布 v10。抖动变化极小，手方向中位数略恶化，没有整体改善证据；GPU 重复噪声仍未量化。独立 SciPy SO(3) 审计得到最大单步 36.95698°、加速度 P95 9.23248°/帧²、相邻法向反转 0，top15 中 13 个靠近证据边界（全部中心的 176/247 本就属于边界）。这些关联不能证明因果。
+
+v9 相对冻结初始球拍的拍面法向最大变化约 67.89°，没有变成相反半球；这没有验证初始物理正反面，也没有排除初始轨迹里的缓慢对称漂移。接续优先量化拍柄/拍框证据消失与恢复的权重变化：zero180–182 只有镜中拍头/拍尖，zero183 镜中拍喉恢复，zero184 真人拍柄恢复。不应继续把 35° 门控当成主因或仅增强全局平滑。
+
+复现取回后的固定输入比较与独立审计：
+
+```sh
+python3 viewer/video_import/compare_refit_runs.py \
+  --before output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v9/gpu-fit \
+  --after output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v10/gpu-fit \
+  --output output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v10/comparison.json
+python3 viewer/video_import/audit_racket_jitter.py \
+  --candidate output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v10/gpu-fit/mhr_refit_candidate.npz \
+  --observations output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v10/observations_snapshot.json \
+  --output output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v10/jitter_audit.json
+```
+
+本轮 15 项相关测试通过（目标函数 6、观测 3、输入 6），包含连续门控端点/邻域、保留帧隔离、CPU 联合拟合和批次一致性。Graphify 按要求再次尝试，仍因缺少模块失败，未安装。完成度台账已记录计算完成、验收拒绝，不能增加已验收 MHR 联合拟合数量。
+
 恢复后应同时记录 publication_event 的撤回状态，刷新页面查看；不要删除历史候选或备份。

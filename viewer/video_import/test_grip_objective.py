@@ -1,6 +1,6 @@
 import unittest
 import torch
-from grip_objective import grip_terms,directed_image_loss,reliability,hand_geometry
+from grip_objective import grip_terms,directed_image_loss,reliability,hand_geometry,hand_direction_weight
 
 
 def hand():
@@ -12,6 +12,15 @@ def hand():
 
 
 class GripObjectiveTests(unittest.TestCase):
+    def test_hand_direction_gate_is_continuous_and_preserves_clear_conflicts(self):
+        import math
+        angles=torch.tensor([0.,25.,34.999,35.001,45.,90.,180.])
+        weights=hand_direction_weight(1-torch.cos(angles*math.pi/180))
+        torch.testing.assert_close(weights[:2],torch.full((2,),.4))
+        torch.testing.assert_close(weights[4:],torch.full((3,),.03))
+        self.assertLess(float(abs(weights[2]-weights[3])),.001)
+        self.assertTrue(torch.all(weights[1:]<=weights[:-1]))
+
     def test_detached_fingers_have_restoring_gradient_and_finite_handle_penalty(self):
         j=hand();r=torch.eye(3)[None].repeat(2,1,1);t=torch.tensor([[.2,0.,3.],[.2,0.,3.]],requires_grad=True)
         terms=grip_terms(j,r,t,torch.tensor([0,.045,0]),.013,torch.ones(2))
@@ -54,7 +63,7 @@ class GripObjectiveTests(unittest.TestCase):
         marks={'frames':[{'frame':i,'points':{'handle_end':[640,378.3333333],'tip':[640,606.6666667]},'mirror_points':{},'source':'automatic_contour_unverified'} for i in [0,2]]}
         calibration={'dimensions_cm':{},'measured':False};ready={'train_frames':[0],'heldout_frames':[2],'validation_source':'synthetic_fixture'}
         out,report=solve(Head(),data,meta,poses,marks,calibration,ready,steps=2,device='cpu')
-        self.assertEqual(report['objective_version'],'confidence_observations_v4_spike_gated');self.assertFalse(report['published_to_viewer'])
+        self.assertEqual(report['objective_version'],'confidence_observations_v5_continuous_hand_gate');self.assertFalse(report['published_to_viewer'])
         self.assertEqual(report['heldout_frames'],[2]);self.assertIn('hand_shaft_deg',report['contact_after'])
         for value in out.values():self.assertTrue(np.isfinite(value).all())
         split,_=solve(Head(),data,meta,poses,marks,calibration,ready,steps=2,device='cpu',batch_size=2)

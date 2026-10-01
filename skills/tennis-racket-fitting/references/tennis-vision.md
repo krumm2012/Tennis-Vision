@@ -30,3 +30,9 @@ Local Viewer: `http://127.0.0.1:18769/datasets/DATASET_ID/result/viewer.html`; w
 The directional candidate reduced acceleration slightly but worsened head and shaft reprojection; its gate retained the prior default. Same real/mirror contours caused direction conflicts and require role rejection. Native MHR was absent from older archives: rerun inference and capture it, rather than infer native parameters from exported mesh coordinates. Standard racket dimensions and inferred grip cannot establish measured handle bevels.
 
 The native GPU refit reduced palm-anchor gaps while worsening hand/shaft direction and held-out reprojection. Gap reduction alone is insufficient for acceptance. When capturing multiple angles, use a separate review tab and verify the displayed frame after every seek; simultaneous user annotations can invalidate otherwise correctly named screenshots. Preserve invalid captures as excluded evidence rather than mixing them into the audit sheet.
+
+## v9–v10 boundary experiments
+
+For this frozen clip, v9 isolated-point gating affected only one mirrored throat point; v10 continuous hand-direction gating affected ten priors. Neither materially reduced jitter, and both remained rejected. Audit actual affected frames before attributing a failure to thresholds. Missing handle endpoints and real/mirror point-set changes remain separate hypotheses; do not strengthen global smoothing or prescribe the experimental 25–45 degree range as a validated fix.
+
+The v9 Viewer is a user-authorized, backed-up preview with accepted=false. Preserve that distinction from acceptance. See the runbook v10 section and iterations/grip_refit_v10/viewer_review/review.json for screenshots, timeline progression and limits. A normal staying in the initial hemisphere does not validate the initial physical face correspondence.

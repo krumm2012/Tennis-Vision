@@ -41,6 +41,18 @@ def directed_image_loss(projected,observed):
     return 1-(F.normalize(a,dim=-1)*F.normalize(b,dim=-1)).sum().clamp(-1,1)
 
 
+def hand_direction_weight(disagreement):
+    """Continuous 25–45 degree transition around the former 35 degree gate.
+
+    Operates on directed image evidence only, without temporal interpolation.
+    Clear agreement/conflict keep the previous .4/.03 endpoints.
+    """
+    import math
+    low=1-math.cos(math.radians(25));high=1-math.cos(math.radians(45))
+    x=((disagreement-low)/(high-low)).clamp(0,1)
+    return .4-.37*x.square()*(3-2*x)
+
+
 def reliability(joints,roots,focal,image_size,marks,train):
     """Downweight a conflicting SAM hand prior using TRAIN evidence only."""
     world=joints+roots[:,None];center,axis,_=hand_geometry(world,.013)
@@ -53,7 +65,7 @@ def reliability(joints,roots,focal,image_size,marks,train):
         uv=p[:,:2]/p[:,2:]*focal[i]+image_size/2
         observed=torch.as_tensor([seen['handle_end'],seen['tip']],device=joints.device,dtype=joints.dtype)
         if torch.linalg.vector_norm(observed[1]-observed[0])<4:continue
-        weight[i]=.03 if directed_image_loss(uv,observed)>.1808479557 else .4 # cos(35 degrees)
+        weight[i]=hand_direction_weight(directed_image_loss(uv,observed))
     return weight
 
 
