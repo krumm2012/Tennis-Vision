@@ -805,3 +805,37 @@ python3 viewer/video_import/compare_refit_runs.py \
 变化很小，没有整体抖动改善证据；没有测量 GPU 重复运行噪声，不能把微小差值当作有效提升。只有一个镜中拍喉点被降权，实验说明处理该点不足以解释或解决主要抖动，并不排除其他类型的自动观测错误。
 
 本轮没有替换 Viewer 或更改发布门槛。下一步应集中检查观测缺失/恢复与人工/自动约束交接处，按原视频分辨真实运动与观测不连续，再设计区间连续性约束。先前审计的“13/15 靠近边界”仍是相关线索，不应直接当作因果结论。新增比较脚本实际运行成功；Graphify 仍因本机缺少模块未完成。
+
+### 按用户明确要求：当前 Viewer 切换到 v9 候选预览
+
+用户明确要求直接替换 Viewer 查看效果。已将 v9 的人体与球拍作为配套候选接入原地址，仍保留 `accepted=false` 与页面“候选预览 · 抖动未通过验收”标记。此次是用户指定预览，不改变历史拟合验收结论。
+
+发布命令：
+
+```sh
+python3 viewer/video_import/publish_refit_preview.py \
+  --result output/video_library/85ade7a072984579831f5cb76e8e5fd3/result \
+  --run output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v9/gpu-fit
+```
+
+备份位置：`output/video_library/85ade7a072984579831f5cb76e8e5fd3/preview_backups/before_joint_20261001_214046/`。备份包含原 mesh_refined.bin、mesh_meta.json、racket_poses.json、viewer.html 及哈希清单。人工球拍/地面标记、原始投影网格、源视频、合成纹理均保留。
+
+显示网格用 `candidate_local + candidate_root - existing_source_root` 重定位，保持既有视频投影坐标，同时让新人体与新球拍使用同一世界坐标。实际验证最大世界坐标差为 `4.76837e-7 m`。当前页面固定配套 v9 姿态，移除旧球拍候选切换/局部重拟合入口，避免与新人体混配；原标注文件仍在，恢复原页面即可继续原编辑流程。
+
+HTTP 已核对新 meta/球拍/HTML 与本地文件一致；浏览器实际显示“联合拟合 v9”和默认多视频合成纹理。当前部署是 Docker 对结果目录的实时挂载，无需重建镜像。`gpu-fit/publication_event.json` 与迭代清单记录用户指定预览；历史 refit_report/completion 的计算验收记录不改写成通过。
+
+恢复此前版本（先关闭播放，再执行；不要覆盖新增的人工标记）：
+
+```python
+from pathlib import Path
+import shutil
+root = Path('output/video_library/85ade7a072984579831f5cb76e8e5fd3')
+backup = root / 'preview_backups/before_joint_20261001_214046'
+for name in ['mesh_refined.bin', 'mesh_meta.json', 'racket_poses.json', 'viewer.html']:
+    pending = root / 'result' / (name + '.restore')
+    shutil.copy2(backup / name, pending)
+    pending.replace(root / 'result' / name)
+(root / 'result/joint_preview_manifest.json').unlink(missing_ok=True)
+```
+
+恢复后应同时记录 publication_event 的撤回状态，刷新页面查看；不要删除历史候选或备份。
