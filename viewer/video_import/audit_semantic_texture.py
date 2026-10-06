@@ -19,16 +19,18 @@ from run_records import write, sha256
 
 def evaluate(args):
     out = args.root / 'semantic_validation'; out.mkdir(exist_ok=False)
+    target_root = getattr(args, 'target_root', None) or args.root
     write(out / 'protocol.json', {'policy_sha256': sha256(args.root / 'policy.json'),
         'baseline_texture_sha256': sha256(args.baseline / 'body_texture_rgba.png'),
         'candidate_texture_sha256': sha256(args.root / 'candidate/body_texture_rgba.png'),
         'code_sha256': sha256(Path(__file__)), 'clothing_boundary_band_native_px': 5,
+        'fixed_target_consensus_sha256': sha256(target_root / 'train_consensus.npz'),
         'domains': ['raw_visible_roi', 'semantic_matched_visible', 'clothing_boundary_band', 'hair_occluded'],
         'warning': 'Automatic labels define observational subsets, not manual geometric/segmentation truth'})
     shutil.copy2(__file__, out / Path(__file__).name)
     batch = json.loads(args.batch.read_text()); _, rows = validate_fusion_group(args.group, batch['clips'], args.layout)
     with np.load(args.layout) as rig: faces, uv, uv_faces = rig['faces'], rig['uv'], rig['uv_faces']
-    with np.load(args.root / 'train_consensus.npz') as c: target, roi = c['target'], c['roi']
+    with np.load(target_root / 'train_consensus.npz') as c: target, roi = c['target'], c['roi']
     base = cv2.imread(str(args.baseline / 'body_texture_rgba.png'), -1)
     cand = cv2.imread(str(args.root / 'candidate/body_texture_rgba.png'), -1)
     atlas = [atlas_centers(x, uv, uv_faces) for x in [base, cand]]
@@ -120,4 +122,5 @@ def evaluate(args):
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
     for key in ['root', 'baseline', 'batch', 'group', 'layout', 'semantic']: p.add_argument('--'+key, type=Path, required=True)
+    p.add_argument('--target-root', type=Path, help='Freeze observational subsets to an earlier TRAIN consensus')
     evaluate(p.parse_args())

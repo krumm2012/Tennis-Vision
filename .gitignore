@@ -128,3 +128,6 @@ models/sam3d_body/
 
 # Local GPU connection configuration (host paths / account details)
 deploy/3dpose/cloud_gpu/*.local.json
+
+# Local code graph derived from the checked-out source.
+graphify-out/
