@@ -35,6 +35,7 @@ def assemble(result,readiness):
         meta=json.loads((root/'mesh_meta.json').read_text())
         reviewed=validate(json.loads(path.read_text()),meta)
         for row in reviewed['frames']:
+            row={**row,**{view:{name:p for name,p in row[view].items() if name!='grip_center' or row.get('grip_confirmed',{}).get(view,False)} for view in ['points','mirror_points']}}
             # A reviewed frame is authoritative, including missing/occluded points.
             rows[row['frame']]={**row,'weights':{view:{name:1. for name in row[view]} for view in ['points','mirror_points']}}
     # Old automatic-only preflights retain their selected heldout points for metrics.

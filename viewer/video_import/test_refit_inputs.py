@@ -78,3 +78,18 @@ class RefitInputsTests(unittest.TestCase):
         v.sum().backward();self.assertTrue(torch.isfinite(params.grad).all());self.assertNotEqual(float(params.grad[0,1]),0)
         rotation=torch.nn.Parameter(torch.zeros(2,3));r=rotation_vector_matrix(rotation);r.sum().backward();self.assertTrue(torch.isfinite(rotation.grad).all())
         torch.testing.assert_close(r,torch.eye(3)[None].repeat(2,1,1))
+
+    def test_manual_grip_distance_cannot_use_joint_fit_heldout_frames(self):
+        with tempfile.TemporaryDirectory() as temp:
+            out=Path(temp);(out/'mesh_meta.json').write_text(json.dumps(self.meta))
+            points={name:[100,100] for name in ['handle_end','tip','rim_side','rim_opposite']}
+            marks={**self.meta,'frames':[{'frame':i,'points':points,'mirror_points':{}} for i in range(0,100,10)]}
+            (out/'racket_landmarks.json').write_text(json.dumps(marks))
+            (out/'racket_dimensions.json').write_text(json.dumps(self.value()))
+            archive=out/'body.npz';np.savez(archive,joints=np.zeros((100,70,3)))
+            def check(frames):
+                (out/'racket_poses.json').write_text(json.dumps({'model':{'grip_position_source':'manual_image_estimate','grip_calibration_frames':frames}}))
+                return assess(out,archive)['blocked_by']
+            reason='grip_calibration_includes_heldout_recalibrate_with_training_frames'
+            self.assertIn(reason,check([0,10]))
+            self.assertNotIn(reason,check([10,20]))

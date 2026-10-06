@@ -1,7 +1,10 @@
 """Video-scoped sparse, reviewed racket landmarks; never infer hidden points."""
 import numpy as np
 
-PARTS=('handle_end','throat','tip','rim_side','rim_opposite')
+PARTS=('handle_end','throat','tip','rim_side','rim_opposite','grip_center')
+
+def usable_grip(row,view='points'):
+    return 'grip_center' in row.get(view,{}) and row.get('grip_confirmed',{}).get(view,False)
 
 def validate(value,meta):
     for key in ['video_sha256','image_size','fps']:
@@ -22,6 +25,14 @@ def validate(value,meta):
                 if a.shape!=(2,) or not np.isfinite(a).all() or np.any(a<0) or np.any(a>meta['image_size']):raise ValueError('球拍关键点必须位于原画面内')
                 clean[view][name]=a.tolist()
         if not clean['points'] and not clean['mirror_points']:continue
+        if 'grip_confirmed' in row or any('grip_center' in clean[v] for v in ['points','mirror_points']):
+            confirmed_grip=row.get('grip_confirmed',{})
+            if not isinstance(confirmed_grip,dict) or set(confirmed_grip)-{'points','mirror_points'}:raise ValueError('握点确认格式无效')
+            clean['grip_confirmed']={}
+            for view in ['points','mirror_points']:
+                flag=confirmed_grip.get(view,False)
+                if type(flag) is not bool or flag and 'grip_center' not in clean[view]:raise ValueError('确认握点需有对应视图的标记')
+                clean['grip_confirmed'][view]=flag
         confirmed=row.get('face_correspondence_confirmed',False)
         if type(confirmed) is not bool:raise ValueError('拍面确认标记无效')
         label=row.get('side_feature','')

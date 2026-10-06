@@ -56,8 +56,8 @@ def solve(head, data, meta, poses, marks, calibration, readiness, steps=120, dev
     optimizer=torch.optim.Adam([delta,racket_delta],lr=.008)
     model=poses['model'];grip=tensor([0,model['grip_y_m'],0])
     objects=tensor([[0,0,0],[0,model['throat_y_m'],0],[0,model['length_m'],0],
-                    [model['head_half_width_m'],model['head_center_y_m'],0],[-model['head_half_width_m'],model['head_center_y_m'],0],[0,model['head_center_y_m'],0]])
-    names=['handle_end','throat','tip','rim_side','rim_opposite','head_center'];manual={r['frame']:r for r in marks['frames']}
+                    [model['head_half_width_m'],model['head_center_y_m'],0],[-model['head_half_width_m'],model['head_center_y_m'],0],[0,model['head_center_y_m'],0],[0,model['grip_y_m'],0]])
+    names=['handle_end','throat','tip','rim_side','rim_opposite','head_center','grip_center'];manual={r['frame']:r for r in marks['frames']}
     train=set(readiness['train_frames']);heldout=set(readiness['heldout_frames'])
     mirror=meta.get('_mirror');n=tensor(mirror['normal_camera']) if mirror else None
     radius=calibration['dimensions_cm'].get('handle_diameter',2.6)/200

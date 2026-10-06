@@ -14,6 +14,7 @@ def main():
       'assets/dataset_racket_review.js':ROOT/'viewer/video_import/dataset_racket_review.js',
       'assets/dataset_tools.js':ROOT/'viewer/video_import/dataset_tools.js',
       'assets/mesh_renderer.js':ROOT/'viewer/sam3d/mesh_renderer.js',
+      'assets/practice_coach.js':ROOT/'viewer/sam3d/practice_coach.js',
       'assets/coaching.js':ROOT/'viewer/sam3d/coaching.js',
       'assets/vendor/three-0.180.0.min.js':ROOT/'viewer/sam3d/vendor/three-0.180.0.min.js'}
     manifest=[]

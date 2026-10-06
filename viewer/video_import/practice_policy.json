@@ -1,0 +1,163 @@
+{
+  "version": "ball_machine_practice_v1",
+  "status": "draft_pending_independent_coach_validation",
+  "scale": [
+    0,
+    100
+  ],
+  "rating_scale": [
+    1,
+    5
+  ],
+  "minimum_automatic_metrics": 2,
+  "minimum_confidence": 0.45,
+  "automatic_scope": "visible_projection_only",
+  "manual_scope": "five_dimension_coach_review",
+  "dimensions": [
+    {
+      "id": "preparation",
+      "label": "准备与引拍",
+      "anchors": [
+        "准备明显滞后",
+        "经常滞后或引拍不完整",
+        "基本完成，偶有滞后",
+        "及时且完整",
+        "在本次目标下持续及时、完整"
+      ]
+    },
+    {
+      "id": "positioning",
+      "label": "移动到位",
+      "anchors": [
+        "未到位且失去击球空间",
+        "多次到位不足",
+        "基本到位，偶有调整不足",
+        "及时到位并保持空间",
+        "在本次来球条件下持续到位"
+      ]
+    },
+    {
+      "id": "contact",
+      "label": "击球位置",
+      "anchors": [
+        "击球位置明显妨碍控制",
+        "多次偏离目标击球位置",
+        "基本符合本次目标",
+        "位置合适且较稳定",
+        "在本次目标下持续稳定、可控"
+      ]
+    },
+    {
+      "id": "coordination",
+      "label": "身体协调",
+      "anchors": [
+        "明显失衡或动作脱节",
+        "多次脱节",
+        "基本连贯，偶有脱节",
+        "连贯且平衡",
+        "在本次目标下持续连贯、平衡"
+      ]
+    },
+    {
+      "id": "recovery",
+      "label": "随挥与回位",
+      "anchors": [
+        "随挥或回位明显缺失",
+        "多次不完整或回位滞后",
+        "基本完成，偶有滞后",
+        "完整并及时回位",
+        "在本次节奏下持续完整、及时"
+      ]
+    }
+  ],
+  "grade_bands": [
+    [
+      80,
+      "TARGET_MET",
+      "目标达成"
+    ],
+    [
+      60,
+      "MOSTLY_COMPLETE",
+      "基本完成"
+    ],
+    [
+      40,
+      "NEEDS_PRACTICE",
+      "需要巩固"
+    ],
+    [
+      0,
+      "FOCUS_REQUIRED",
+      "重点练习"
+    ]
+  ],
+  "limitations": [
+    "No NTRP or professional classification",
+    "Automatic projection scores and manual five-dimension scores are separate series",
+    "Shot outcomes are separate from movement scores",
+    "Compare only matching policy, method, stroke and machine settings",
+    "Heuristic uncertainty is not a validated confidence interval"
+  ],
+  "automatic_curves": {
+    "arm_extension": [
+      [
+        60,
+        0.35
+      ],
+      [
+        120,
+        0.62
+      ],
+      [
+        145,
+        0.8
+      ],
+      [
+        165,
+        1
+      ]
+    ],
+    "shoulder_turn_change": [
+      [
+        0,
+        0.35
+      ],
+      [
+        12,
+        0.5
+      ],
+      [
+        30,
+        0.8
+      ],
+      [
+        45,
+        1
+      ]
+    ],
+    "preparation_knee_flexion": [
+      [
+        0,
+        0.35
+      ],
+      [
+        12,
+        0.5
+      ],
+      [
+        25,
+        0.75
+      ],
+      [
+        45,
+        1
+      ]
+    ]
+  },
+  "automatic_units": [
+    "deg_2d"
+  ],
+  "automatic_weighting": "confidence_weighted_mean_of_eligible_metrics",
+  "manual_weighting": "equal_weight_rating_times_20_all_five_confirmed"
+}

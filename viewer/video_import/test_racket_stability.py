@@ -4,6 +4,14 @@ from scipy.spatial.transform import Rotation
 from racket_stability import stable_rotations,supported_frames,motion_metrics
 
 class RacketStabilityTests(unittest.TestCase):
+    def test_reviewed_rotation_stays_exact_while_neighbors_can_smooth(self):
+        matrices=Rotation.from_euler('y',np.linspace(0,80,15)[:,None],degrees=True).as_matrix()
+        matrices[7]=matrices[7]@Rotation.from_euler('x',45,degrees=True).as_matrix()
+        result=stable_rotations(matrices,np.ones(15),25,fixed_frames=[7])
+        np.testing.assert_array_equal(result[7],matrices[7])
+        self.assertGreater(np.linalg.norm(result[6]-matrices[6]),.01)
+        np.testing.assert_allclose(result.transpose(0,2,1)@result,np.tile(np.eye(3),(15,1,1)),atol=1e-7)
+
     def test_face_outlier_is_reduced_without_freezing_swing(self):
         # 100 degrees over one second; corrupted central face estimate +65deg.
         truth=Rotation.from_euler('y',np.linspace(0,100,26)[:,None],degrees=True).as_matrix()

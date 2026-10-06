@@ -26,6 +26,19 @@ class ObservationTests(unittest.TestCase):
             with (root/'racket_keypoints.json').open('a') as f:f.write(' ')
             with self.assertRaises(ValueError):automatic_rows(root,'own')
 
+    def test_grip_residual_requires_confirmation_for_each_view(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);ready=self.fixture(root)
+            path=root/'racket_landmarks.json';marks=json.loads(path.read_text())
+            row=marks['frames'][0]
+            row.update(points={'grip_center':[100,100]},mirror_points={'grip_center':[200,100]},
+                       grip_confirmed={'points':True,'mirror_points':False})
+            write(path,marks)
+            result=assemble(root,ready)['frames'][0]
+            self.assertEqual(result['points'],{'grip_center':[100.,100.]})
+            self.assertEqual(result['mirror_points'],{})
+            self.assertEqual(result['weights']['points'],{'grip_center':1.})
+
     def test_spikes_are_downweighted_without_suppressing_swings_or_using_holdout(self):
         from refit_observations import gate_isolated_points
         def rows(xs):return [{'frame':i,'source':'automatic_contour_unverified','points':{'tip':[x,100]},'mirror_points':{},'weights':{'points':{'tip':.2}}} for i,x in enumerate(xs)]

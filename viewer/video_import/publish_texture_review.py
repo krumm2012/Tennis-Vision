@@ -4,8 +4,13 @@ from pathlib import Path
 import numpy as np
 from run_records import write,sha256
 
-def publish(batch,fusion,baseline,layout,destination):
-    report=json.loads((fusion/'texture_report.json').read_text());first=Path(json.loads((batch/'batch_manifest.json').read_text())['clips'][0]['folder'])
+def publish(batch,fusion,baseline,layout,destination,clip=None):
+    report=json.loads((fusion/'texture_report.json').read_text())
+    clips=json.loads((batch/'batch_manifest.json').read_text())['clips']
+    selected=clips[0] if clip is None else next(c for c in clips if Path(c['folder']).name==clip)
+    first=Path(selected['folder'])
+    source_meta=json.loads((first/'result/mesh_meta.json').read_text())
+    if source_meta['video_sha256']!=sha256(first/'source.mp4'):raise ValueError('Clip mesh/video provenance mismatch')
     baseline_report=json.loads((baseline/'texture_report.json').read_text())
     if (destination/'record.json').exists() and not json.loads((destination/'record.json').read_text()).get('texture_review'):raise ValueError('Cannot replace an accepted dataset with a texture review')
     if report['layout_sha256']!=sha256(layout) or report['artifact_sha256']['body_texture_rgba.png']!=sha256(fusion/'body_texture_rgba.png'):raise ValueError('Texture candidate provenance mismatch')
@@ -33,4 +38,5 @@ def publish(batch,fusion,baseline,layout,destination):
 if __name__=='__main__':
     p=argparse.ArgumentParser()
     for name in ['batch','fusion','baseline','layout','destination']:p.add_argument('--'+name,type=Path,required=True)
-    a=p.parse_args();print(publish(a.batch,a.fusion,a.baseline,a.layout,a.destination))
+    p.add_argument('--clip',help='Clip folder name; defaults to first clip')
+    a=p.parse_args();print(publish(a.batch,a.fusion,a.baseline,a.layout,a.destination,a.clip))

@@ -35,6 +35,11 @@ def assess(result, archive, allow_assumed=False, allow_automatic=False):
     if not native:reasons.append('native_mhr_parameters_missing_rerun_required')
     evidence=clear if len(clear)>=6 else automatic
     heldout=evidence[::5]
+    pose_path=out/'racket_poses_directional.json' if (out/'racket_poses_directional.json').exists() else out/'racket_poses.json'
+    if pose_path.exists():
+        model=json.loads(pose_path.read_text()).get('model',{})
+        if model.get('grip_position_source')=='manual_image_estimate' and set(model.get('grip_calibration_frames',[]))&set(heldout):
+            reasons.append('grip_calibration_includes_heldout_recalibrate_with_training_frames')
     training=set(evidence)|{r['frame'] for r in marks}
     if allow_automatic and (out/'racket_keypoints.json').exists():
         from refit_observations import automatic_rows

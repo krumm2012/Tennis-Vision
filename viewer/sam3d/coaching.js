@@ -10,6 +10,7 @@ function validate(report,meta){
  return report;
 }
 async function mount({container,before,video,seek,reportUrl='coaching_report.json',metaUrl='mesh_meta.json'}){
+ if(root.TennisPracticeCoach)await root.TennisPracticeCoach.mount({container,video,seek});
  const panel=document.createElement('section');panel.className='coach-panel';if(before)before.before(panel);else container.append(panel);
  const style=document.createElement('style');style.textContent='.coach-panel{margin:16px 0;padding:18px;border:1px solid #405c79;border-radius:12px;background:#192638;color:#e6eef8}.coach-panel h2{margin:0 0 10px}.coach-panel button{font:inherit;background:#2d4560;color:#e6eef8;border:1px solid #587894;border-radius:7px;padding:8px;margin:4px;cursor:pointer}.coach-panel button[aria-pressed=true]{background:#155a72;border-color:#96deef}.coach-panel p{line-height:1.6}.coach-panel .coach-cue{padding:12px;border-left:3px solid #82d6bb;background:#153b3a}.coach-panel small{color:#b6c9de}';document.head.append(style);
  const el=(tag,text,parent=panel)=>{const n=document.createElement(tag);n.textContent=text;parent.append(n);return n};

@@ -874,4 +874,295 @@ python3 viewer/video_import/audit_racket_jitter.py \
 
 本轮 15 项相关测试通过（目标函数 6、观测 3、输入 6），包含连续门控端点/邻域、保留帧隔离、CPU 联合拟合和批次一致性。Graphify 按要求再次尝试，仍因缺少模块失败，未安装。完成度台账已记录计算完成、验收拒绝，不能增加已验收 MHR 联合拟合数量。
 
+## 2026-10-02 顺序验证接续
+
+新增纹理已经完成九段留出纹素投影审计、三段同几何视觉抽查，以及 v9/v10 球拍证据边界审计。具体命令、表格和独立预览见 [离线外观迭代的顺序验证记录](OFFLINE_APPEARANCE_ITERATION.md#顺序验证2026-10-02)。产物为 `output/offline_iterations/20261002_sequential_validation/`，新脚本/测试快照与报告哈希在 `validation_manifest.json`。
+
+当前结论是验证执行完成、验收未完成：新增纹素具有独立留出支持，但颜色残差/衣物边缘/手部外观仍需处理；球拍热点有自动点缺失/恢复、置信度变化和镜中重投影冲突。没有改写已拒绝的拟合记录，没有替换主 Viewer。云 GPU 已通过空闲与锁检查，本轮尚未调度新工作。下一轮应先复核自动拍框/拍柄观测与镜面角色/几何一致性，再用固定输入的有界对照实验验证影响；不能仅靠全局平滑，也不能把外观覆盖当作几何/握拍验收。
+
 恢复后应同时记录 publication_event 的撤回状态，刷新页面查看；不要删除历史候选或备份。
+
+
+## 本地多 Agent 外观迭代（2026-10-01，跨日完成）
+
+见 [OFFLINE_APPEARANCE_ITERATION.md](OFFLINE_APPEARANCE_ITERATION.md)：两组外观输入独立校验、可选纹素回退、缓存来源绑定与两段 CPU 对照。输出位于 `output/offline_iterations/20261001_texture_v2/`。云 GPU 未开启，未替换 Viewer；缺省组需要补齐原生参数及相机元数据。
+
+
+### 九段 Viewer 集合
+
+2026-10-02 已将剩余八段原生结果导入独立可遍历集合，支持逐帧/慢放/原生当前帧投影与共享UV纹理对照。入口、覆盖率分母和复现命令见 [OFFLINE_APPEARANCE_ITERATION.md](OFFLINE_APPEARANCE_ITERATION.md) 的九段 Viewer 章节。未替换原v9主结果，未发布为验收结果，未新增GPU任务。
+
+
+## v11：镜中缺证据边界的配对消融（2026-10-02）
+
+按顺序先复核 v9/v10 热点，再准备新标注帧，最后执行限定范围的诊断GPU对照。代码新增 `audit_racket_roles.py` 与 `prepare_racket_boundary_experiment.py`；未修改求解器、损失权重或验收门槛。
+
+### 角色/镜面审计
+
+使用原生真人/镜中MHR右腕作关联诊断，以固定镜面虚相机射线检查成对关键点。独立镜中MHR使用其自己的 focal，并已按原生约定恢复x；射线反射只应用一次。未确认的rim两侧不用于成对几何指标。
+
+- 自动点：213帧、170个成对部位，极线误差中位数8.2743、P95 31.9971 canonical px。
+- 既有人工标记：10帧、8个成对部位，中位数3.5501、P95 32.3776 canonical px。
+- 界面第113帧自动tip射线间距0.21066m；界面第185帧自动tip间距0.18163m。
+- 第186帧既有人工handle/tip间距0.16473/0.15483m。它属于既有保留帧，审计只作诊断，未修改或用于门控。
+- “点更靠近另一角色的估计腕点”也出现在既有人工帧，说明腕/镜面估计本身可能有误，不能将该距离启发式直接当作角色误标分类器。未发现完全相同的真人/镜中关键点集；选中轮廓的来源ID未保留，因此不能据此证明无重复轮廓关联。
+
+报告：`output/offline_iterations/20261002_joint_evidence_review/roles_native_focal/role_geometry_report.json`。之前的 `roles/` 是使用真人focal的初稿，已被这个使用独立mirror_focal的版本取代；两版保留以追踪差异。极线/射线指标只能说明观测与当前相机/镜面不一致，不能区分平面、相机、时间匹配和点标记的误差来源。
+
+### 新验证帧隔离
+
+预留零基 `[30,80,130,155,210,230]`，即界面31/81/131/156/211/231帧。A/B两组在生成新拟合前都删除这些帧的自动点与stereo_shaft，确认不在任何训练观测中。原始PNG、12个真人/镜中裁剪、哈希与空标注模板保存于 `new_annotation_packet/`。此前v8–v10使用过这些帧的自动点，因此不能称完全未见数据。新标签仍 pending，不能报告新的独立验收通过。
+
+审核页面：
+
+http://127.0.0.1:18769/datasets/defdd710b75a5da78951c6fd56cbbf26/result/viewer.html
+
+该页面不显示旧自动点或拟合投影，支持原像素放大、真人/镜中关键点、逐帧检查与导出已人工检查的标注。导出不会改写主Viewer或自动触发拟合，遮挡部位保持空缺、物理A/B未确认。Browser验证帧切换、空标注导出限制，控制台无错误。
+
+### GPU配对实验
+
+云锁可取得、无活动计算、远端六个求解依赖SHA与本地一致后，沿用现有代码执行120步：
+
+| 组 | job | 训练观测帧数 | 状态 |
+|---|---|---:|---|
+| control（两组共同隔离6个预留帧） | `7d7c903d17ba462fa8ec5192ac003e87` | 215 | completed/rejected |
+| mirror_ablation（另移除zero180–184镜中自动点） | `8f73796af82a416facca9b69b0da3895` | 211 | completed/rejected |
+
+两组真人点、人工标记、旧保留帧17/185、原生档案、相机/镜面、尺寸和初始球拍完全一致。消融仅移除5帧未确认镜中自动点；其中4帧失去所有训练点，所以training membership有4帧差异。通用 `compare_refit_runs.py` 正确拒绝此情况，未放宽其“完全同观测”检查；专用 `compare_ablation.py` 另验证所有差异只在预先声明范围，并记录观测哈希/训练帧差异。
+
+| 指标 | control | mirror_ablation |
+|---|---:|---:|
+| 第183帧角加速度 / °每帧² | 14.3826 | 3.8170 |
+| 第185帧角加速度 / °每帧² | 3.6862 | 7.4482 |
+| 全段角加速度P95 / °每帧² | 9.1054 | 8.7182 |
+| 真人旧保留点中位数 / canonical px | 7.6263 | 8.4253 |
+| 真人旧保留点P95 / canonical px | 16.9230 | 25.6576 |
+| 镜中旧保留点P95 / canonical px | 21.5065 | 27.7769 |
+| 镜中旧保留柄轴夹角 / °（1组） | 1.0421 | 9.5045 |
+| 掌内握点代理中位数 / mm | 4.1335 | 4.1603 |
+| 手/柄轴夹角中位数 / ° | 27.4741 | 27.8517 |
+
+局部抖动明显下降，但恢复交接处加速度上升、重投影和部分手部指标退步，不能采用“直接删除该段镜中约束”的方案。原视频接触表中的消融镜中投影仍明显偏离可见拍框。一次A/B没有量化GPU重复噪声，也未消除相机/镜面与标记混杂，不能声明确定因果或接受。
+
+产物：`iterations/grip_refit_v11_boundary/` 中候选、远端清单、completion、观察快照、protocol、comparison；审计/源图/代码快照在 `output/offline_iterations/20261002_joint_evidence_review/`。两组均未发布，主v9配套预览哈希保持一致。18项相关Python测试通过，标注页面脚本语法检查通过，Graphify按Git源码范围更新。
+
+下一步先对新预留帧填写清晰可见部位，并复核第113/185/186帧的观测对应与镜面假设；完成后单独评估新标签残差，再设计保留可信镜中观测的连续性约束。不能以本轮局部加速度改善跳过重投影和真实接触检查。
+
+
+### v11：收到6帧新人工标记后的评估
+
+已读取下载的 `reserved_validation_landmarks.json`，保存接收原件与校验副本，确认视频SHA、2560×1440、25fps、零基30/80/130/155/210/230；两组GPU报告均无训练重叠。28个真人点、9个镜中点；真人有4组handle→tip、镜中仅1组，缺失部位未补填。标签没有加入训练，不重新拟合。
+
+| 评估指标 | 初始球拍 | v11控制 | v11镜中消融 |
+|---|---:|---:|---:|
+| 真人点中位数 / canonical px | 9.6853 | 8.0027 | 8.0026 |
+| 真人点P95 / canonical px | 22.2073 | 17.4927 | 17.4922 |
+| 真人柄轴中位数 / °（4组） | 11.3225 | 4.3892 | 4.3892 |
+| 镜中点中位数 / canonical px | 17.9439 | 15.0616 | 15.0616 |
+| 镜中点P95 / canonical px | 29.9607 | 28.4780 | 28.4780 |
+
+第31帧的镜中投影明显偏離拍框；新标记的tip/throat与当前镜面两射线间距约55.9/60.4mm，第81帧tip约2.8mm、handle约28.8mm、throat约39.6mm。不能据这些诊断区分镜面/相机估计、点定位或模型尺寸问题，也不能用这些已查看标签调参后继续称其完全独立验收。两组在新6帧基本一致，消融影响局限于热点附近，不证明整体改善。
+
+报告与同范围对照截图：`output/offline_iterations/20261002_joint_evidence_review/new_label_evaluation/`；评估脚本 `evaluate_reserved_racket.py`，3项新增隔离/零样本测试通过。整体验收仍未通过、原v9主预览保持不变。后续先用原训练证据检查镜面/观测对应，保留新6帧作回归检查；若据其调参则需另补未参与调参的最终评估数据。
+
+新评估页面：
+
+http://127.0.0.1:18769/datasets/f9b640731a365ceabd42bcdf0b1ad5af/result/viewer.html
+
+### 镜面／相机与关键点对应核查：2026-10-02
+
+冻结 v9 staged 输入和 v6 native 档案，执行 `audit_mirror_camera.py`。最新完整报告为 `output/offline_iterations/20261002_joint_evidence_review/mirror_camera_audit_v2/mirror_camera_report.json`；早先 `mirror_camera_audit/` 是缺少 COCO 反例与 FFmpeg 滤镜校验的阶段报告。输入、视频、代码哈希和 FFmpeg 重放日志均保存；未启动 GPU、未修改已保存训练观测或原 v9 Viewer。
+
+坐标一致性通过：真人249帧、镜中245有效帧的焦距均为2937.2095px；原生相机点回投与保存2D点的最大差异分别0.000277/0.000231原图px。镜中无效zero2/6/86/170保留缺失。反射矩阵行列式为−1、二次反射误差2.22e−16，水平翻转后的x/像素已还原一次，MHR沿用解剖索引。COCO左右交换单独比较，同400个核心验证点当前映射中位15.1482px；不交换左右为45.9902px，支持当前映射。代码／坐标一致不等于几何或实际相机标定正确。
+
+重现镜面估计的全部2633个对应点及原有核心验证中位数；核心400点P95为65.8020px，右腕28个验证点中位17.2994px、P95 85.3585px。这些均为2560×1440原图像素，换算canonical需除以2。人体纹理门槛不能作为球拍对应精度通过证明；焦距、主点、畸变和镜面距离仍未实测。
+
+仅用既有训练zero100/174/205的5对轴向人工点、固定焦距和镜面距离，在法向±5°诊断范围内试拟合；排除旧17/185、新6预留帧及未确认rim对应。法向变化1.3528°，对称极线误差中位数如下：
+
+| 组／原图px | 当前镜面 | 诊断法向 |
+|---|---:|---:|
+| 训练5对／3帧 | 2.3046 | 0.8401 |
+| 旧验证3对／第186帧 | 62.5339 | 92.8464 |
+| 新预留5对／第31、81帧 | 13.8872 | 19.0843 |
+
+诊断法向没有通过验证，不替换当前镜面。极线约束不含镜面距离的绝对尺度，不能用调距离消除此类点线不一致；仅3个训练帧也不足以标定实际内参。第81帧handle_end位于手／腕附近，其是否为物理拍柄末端、两视图throat是否采用同一位置定义仍需复核。未改动用户标记，未据新标签调参；这些已查看标签作为回归数据，最终独立验收仍需另留未参与调参的数据。
+
+发现并修正后续观测的时间映射错误：原视频为VFR，250帧，平均25.0801fps，单帧间隔约0.078–97.421ms。旧 `racket_observations.py` 用 `round(n / 25 * average_fps)` 选原视频帧，与实际归一化映射在152/249帧不同。新 `source_frame_alignment.py` 使用精确PTS与server的零起点、默认round=near的fps滤镜映射，检查归一化时间轴及EOF帧数，并保留原高分辨率取帧。对实际FFmpeg滤镜前后校验和的249帧核查全部通过；17帧抽查中时间映射正确画面的图像差异更低。
+
+UI106/116的新映射分别为原视频zero106/116，旧为105/115；UI183两者均为183。故错帧可能解释部分热点，不能声明解释全部抖动；仍需重生成自动观测及同分割拟合对照才能量化收益。后续生成写入映射方法及归一化视频SHA，历史观测和所有v6–v11运行保留。代码已修正，本轮没有重生成观测、没有更新运行中的Docker服务镜像。
+
+```sh
+python3 -B viewer/video_import/audit_mirror_camera.py \
+  --staged output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v9/staged/result \
+  --native output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v6/native/reconstruction.npz \
+  --dataset output/video_library/85ade7a072984579831f5cb76e8e5fd3 \
+  --labels output/offline_iterations/20261002_joint_evidence_review/new_label_evaluation/labels_validated.json \
+  --protocol output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v11_boundary/protocol.json \
+  --output output/offline_iterations/20261002_joint_evidence_review/mirror_camera_audit_replay
+```
+
+独立核查页面（6张人工点／极线图、3张热点取帧对照及JSON）： http://127.0.0.1:18769/datasets/05f8186e7af507a887bb37e3fa4193c2/result/viewer.html 。27项相关测试与代码编译检查通过，Graphify已更新。主预览三个文件SHA与 `joint_preview_manifest.json` 一致。下一步按时间戳在隔离目录重生成观测、保留同样验证划分，随后复核明确物理对应，再考虑实测标定或联合拟合。
+
+#### 第186帧反馈复核
+
+用户指出第186帧未对齐，补充 `frame186_detail/` 的v9预览／v11控制／镜中消融源图对照。原图中的同色线是极线，不是拍面法线；新图绿色为人工点、黄色为拟合拍框／轴线、红色为拟合的无向法向轴，不能作为法向真值或物理A/B面证明。第186帧为zero185（7.4秒），映射原视频zero186，取帧正确。
+
+三对人工轴向点真人侧极线偏差：handle65.9514px、throat43.9656px、tip62.5339px；镜中侧34.2313/22.5740/31.9609px，均为原图像素。当前固定相机／镜面下，改变球拍姿态不能让这三对不一致的像素同时精确对应。v9拍框在两视图仍明显偏离源图；v11控制虽镜中柄轴误差1.0421°，五个镜中点位置仍偏31.6278–43.6476原图px。需要先复核点的物理含义及镜面／相机，不能单帧旋转法向后宣称通过。
+
+补充页面 http://127.0.0.1:18769/datasets/05f8186e7af507a887bb37e3fa4193c2/result/frame186.html ，在原核查页增加入口。报告明确 `point_error_original_px`，修正前数值相同但单位字段误用canonical的阶段报告保留为 `report_before_units_fix.json`，不作最新引用。没有优化、改标记、改相机／镜面或替换主预览；三个候选旋转正交性及帧映射核查通过、5个新增页面／数据／PNG路由均200。
+
+#### 球拍参数与人工点差异修正（2026-10-02）
+
+后续GPU优化没有训练第186帧；早期CPU方向拟合则曾读取人工点。发现旧CPU把人工点合并进自动点，而自动head_center以6倍残差继续参与，自动轮廓／stereo_shaft也未排除；未确认的拍框两侧固定排序，30°初始化限幅与SO(3)展示平滑还能移动人工姿态。第186帧本身取帧正确，自动拍尖距人工仅约6原图px，不能把最终姿态偏差全部归因于识别或错帧。
+
+代码调整：`racket_manual_evidence.py` 让已审核帧完全替代自动点，人工未标出的视图／遮挡点不补自动证据；两侧物理对应未确认时各视图独立作无序匹配。`fit_dataset_grip.py` 排除人工帧自动轮廓和立体柄轴先验，使用人工柄轴判断手方向冲突，跳过人工初始化限幅。`racket_stability.py` 新增fixed_frames，精确保留这些帧求解旋转。新增显式训练编辑CLI `--manual-correction-frames 185`，以现有握点拟合真人点并在序列优化和后续平滑中固定该姿态。默认未启用强制编辑，GPU验证协议不变。
+
+单帧工具 `correct_reviewed_racket_frame.py` 使用原图内参、正确主点、多初值和未确认两侧排列，分别诊断真人、两视图等权、固定握点三种模式。原v9固定人体下，真人五点中位22.112→3.069原图px，柄末端仍21.909px，镜中中位32.537px；固定握点gap为0，只代表守住原解剖先验，不等于实测皮肤接触。仅贴真人点中位1.305px，却需要平移893.9mm、偏离原握点853.9mm。相机／镜面／拍形／人体深度均冻结，这个冲突不能确定归罪于某个参数。
+
+实际CPU运行位于 `output/offline_iterations/20261002_joint_evidence_review/manual_parameter_optimization/` 的before、after、after_edit185。所有运行使用同一份v9 staged JSON与该视频attempt0004原生人体，未载入multiview_constraints，未重生成历史自动时间映射；不是与v9 GPU解的直接对照。protocol记录输入SHA、实际fit脚本SHA，code_before保存旧脚本、code_final保存最终代码；旧脚本调用新版stable_rotations的默认无固定帧模式，其目标和变量与原版一致。
+
+| CPU对照 | 真人全部人工点中位／原图px | 真人P95／原图px | 角加速度P95／°每帧² |
+|---|---:|---:|---:|
+| before | 28.9703 | 93.6538 | 5.0386 |
+| after：人工优先 | 18.2630 | 107.5752 | 6.4412 |
+| after_edit185：额外固定第186帧 | 见manual_comparison.json | 见manual_comparison.json | 6.4890 |
+
+CPU第186帧真人点中位57.3989→2.8666原图px，柄轴17.0383→0.0095°，镜中仍32.3088px；最终旋转与显式编辑结果相同、平滑改变量0。三次整段均needs_review/rejected，门控恢复原发布姿态，诊断读取 `racket_poses_directional.json`。这轮旧10个人工帧是训练点，zero17/185历史验证角色对这些编辑候选撤销；新6帧未载入，不能把上述数字当作独立验证通过。
+
+复现时只对新的隔离result目录运行：
+
+```sh
+python3 viewer/video_import/correct_reviewed_racket_frame.py \
+  --dataset output/video_library/85ade7a072984579831f5cb76e8e5fd3 \
+  --labels output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v9/staged/result/racket_landmarks.json \
+  --frame 185 --output output/offline_iterations/manual186_replay
+python3 viewer/video_import/fit_dataset_grip.py \
+  --dataset output/video_library/85ade7a072984579831f5cb76e8e5fd3 \
+  --result YOUR_FRESH_STAGED_RESULT --manual-correction-frames 185
+```
+
+单帧报告在 `frame186_manual_correction/manual_correction_report.json`，全段对照在 `manual_parameter_optimization/manual_comparison.json`。独立 [原因／源图对照](http://127.0.0.1:18769/datasets/3aa5d917272490566237eaff8d1a684e/result/viewer.html) 与 [第186帧三维候选](http://127.0.0.1:18769/datasets/3aa5d917272490566237eaff8d1a684e/result/edit3d.html) 已生成，只有zero185球拍与原v9不同；人体和所有其他帧保留。review_manifest记录页面／数据／模型SHA；浏览器已核查186/249帧、人工叠加、握拍视角及无控制台错误，截图 `frame186_manual_correction/browser_preview186.png`。31项相关测试、编译检查和Graphify更新完成，主v9三个保护文件SHA不变。本轮仅本地CPU诊断，没有新增GPU运行、没有替换主预览。下一步优先核查柄末端／喉部物理定义和冻结握点的投影，再用可信镜中配对评估相机／镜面；之后重生成PTS对齐自动观测，采用明确训练／回归／独立验收分割比较。
+
+#### 实际握点／柄底／拍喉定义核查及镜面内参敏感性（2026-10-02）
+
+新增只读 `audit_racket_physical_definitions.py`，结果保存于 `output/offline_iterations/20261002_joint_evidence_review/physical_definitions_v1/`。报告绑定归一化视频SHA、v9实际人体candidate、主v9球拍、旧10／新6人工标签、v9 staged镜面与v6原生相机的SHA。v9显示网格使用既有source_roots重基准，不能直接要求candidate_root等于mesh_meta；审计验证全部249帧世界网格最大差5.96e-8m、预览manifest SHA和全部球拍旋转／平移一致。
+
+物理定义发现：
+
+- `handle_end`模型坐标为(0,0,0)，应对应柄底端面轴心；可见边缘、手腕、握柄中点不可互换。
+- `grip_contact`使用MCP/PIP走廊并偏移13mm，当前球拍握点又固定为柄底以上45mm。两者都是估计先验，无实测握点／皮肤接触。原资产准备脚本曾使用100mm，方向拟合后固定45mm。
+- `prepare_wilson_model.py`把`throat_y_m`设为线床顶点最小y（35.0847cm），实际为线床下缘中心。界面只写“拍喉”，含糊于V形分叉或喉桥。此次记录定义但不重解释／改写历史像素；实际源图是否标同一特征仍需按清晰帧逐点复核。
+- 第186帧真人柄尾可见，原人工点在其附近；人工柄底到当前握点37.2423原图px，而模型两点距约15.2px。固定原姿态／深度的射线－轴线最小二乘给出握点距柄底110.2mm、射线间隙7.91mm，仅为模型代理。原v9握点到v9关节MCP/PIP先验差3.94mm，也不能证明手指网格接触。
+- 镜中柄底标记在手部／腕附近，原像素不足以确认独立可见端面中心；已询问用户是可见柄底还是估计点，尚未收到确认。保留原标记，将它视为物理对应待核查，不作为相机真值。
+
+只改变`grip_y_m`，固定当前v9手部握点、镜面、相机、拍形，并分别重新拟合旧8个完整人工帧的真人旋转。距离扫描4.5／6.5／8／10／12cm；每帧均拟合本身人工点，不能当作保留帧准确率，新6帧未进入此扫描。第186帧对照（原图px）：
+
+| 假设距柄底 | 真人五点RMS | 真人中位 | 柄底误差 | 镜中五点中位 |
+|---|---:|---:|---:|---:|
+| 4.5cm | 10.0901 | 3.0690 | 21.9092 | 32.5365 |
+| 8cm | 4.6345 | 3.9834 | 7.5902 | 37.1168 |
+| 10cm | 5.3361 | 5.3176 | 2.2868 | 44.1652 |
+
+8cm虽改善第186帧整体及柄底，却恶化镜中；UI206真人RMS 5.53→12.77px，其它帧偏好的距离也不同。低中位数可掩盖单个柄底大误差，必须同时列RMS及逐点误差。此次没有采用8／10cm，也没有据此测量握法。
+
+相机敏感性另行使用冻结v6原生人体和v9 staged镜中COCO点，肩／髋／膝／踝199个训练帧、50个保留帧（每5帧取1帧），手腕／手臂仅评估；所有人工球拍点仅评估，完全不训练相机。固定人体及根平移，分别允许镜面法向／距离、再加全局焦距比例、再加主点偏移。诊断范围法向各±5°、距离±2m、焦距1/1.15至1.15倍、主点各画幅±5%；该范围是诊断边界，不是已验证参数。
+
+| 候选 | 焦距比例 | 核心人体保留中位／P95 | 手臂保留中位 | 新审核球拍极线中位 | 原生真人投影变化中位 |
+|---|---:|---:|---:|---:|---:|
+| 当前／只调镜面 | 1.0000 | 15.1482／65.8020 | 18.8869 | 13.8872 | 0 |
+| 镜面＋焦距 | 1.1023 | 12.8874／68.9112 | 24.4708 | 38.0564 | 53.4228 |
+| 镜面＋焦距＋主点 | 1.1500 | 12.9562／68.8068 | 23.0770 | 49.9246 | 102.2679 |
+
+单位均为原图px。最后候选焦距触边、主点偏(17.8323,71.2359)px；虽能把第186帧柄底／拍喉极线偏差降到5.39／2.56px，但拍尖仍35.43px、新球拍配对退步。因此全部拒绝推广。人体与COCO都是估计，改焦距可能补偿人体误差；原生真人投影变化是自一致诊断而非独立人体准确率。镜面距离在极线约束中消去，不能通过改距离解决错误配对。镜头畸变、物理镜面与相机均未实测。
+
+```sh
+python3 viewer/video_import/audit_racket_physical_definitions.py \
+  --dataset output/video_library/85ade7a072984579831f5cb76e8e5fd3 \
+  --staged output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v9/staged/result \
+  --native output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v6/native/reconstruction.npz \
+  --body-candidate output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v9/gpu-fit/mhr_refit_candidate.npz \
+  --labels output/video_library/85ade7a072984579831f5cb76e8e5fd3/iterations/grip_refit_v9/staged/result/racket_landmarks.json \
+  --new-labels output/offline_iterations/20261002_joint_evidence_review/new_label_evaluation/labels_validated.json \
+  --output output/offline_iterations/physical_definition_replay
+```
+
+报告`physical_definition_report.json`、实际资产定义图、8帧距离敏感性图与真人／镜中原像素裁剪保存原目录，代码snapshot和发布manifest可复核来源。独立 [互动核查页](http://127.0.0.1:18769/datasets/9a483314db103cc89b3e21592651efb9/result/viewer.html) 可切换4.5／8／10cm；浏览器验证8cm状态数值、图像切换及无控制台错误，截图`browser_grip8.png`。9项相关测试通过，包括已知几何的握点距离反解、镜面距离的极线不变性，以及修改人体保留／人工球拍点不会改变相机训练解。主v9保护文件SHA不变，无GPU运行或新验收发布。
+
+下一步依据用户确认的可见性，优先统一端面轴心与线床下缘特征，保留遮挡／不确定点；握点距离需要清晰手部证据或实测，不直接全段改成8cm。现有相机／镜面继续保留，可信配对不足时使用已知尺寸的真人／镜中固定几何核查内参和镜面，再评估手部深度与联合拟合。
+
+
+#### 人工握点标注与图像校准（2026-10-02）
+
+新增 `grip_center` 原图像素及逐观测 `grip_confirmed.points / mirror_points`。握点定义为手掌包握区域中心在拍柄轴上的位置，不等同于手腕或柄底端面轴心；旧 `throat` 界面名称明确为线床下缘中心，历史坐标不重解释。未确认的握点只保存，CPU／GPU残差、距离估计均排除；真人和镜中分别确认。原5点、视频SHA、尺寸、fps与旧schema兼容。
+
+当前主视频已安装 [握点标注页](http://127.0.0.1:18769/datasets/85ade7a072984579831f5cb76e8e5fd3/result/grip_annotation.html)，默认第186帧。操作：真人／镜中切换 → 点击清晰包握区域 → 勾选确认 → 保存握点并校准。方向键移动1原图像素，Shift为10像素；遮挡留空。未来打包会自动附带同一页面。当前其它审计数据集缺少完整主球拍／元数据，不声称已安装全库。
+
+新增 `racket_grip_calibration.py` 和 `/api/videos/<id>/racket-grip-calibration`。同帧5个真人球拍点先独立估计刚体位姿，再从已确认握点估计柄底沿轴距离，使用原图分辨率与现有相机／拍形。默认距离搜索1–20cm，拒绝边界解，握点残差阈值4 canonical px、五点RMS阈值8 canonical px，多帧距离相对中位最大差须≤2.5cm。单帧仅形成图像候选；厘米值不是实测，镜面不用于距离估计。握点射线采用原握点深度，只调整候选球拍，不改变人体；手指皮肤接触与时序仍未验收。
+
+保存分别写 `racket_landmarks.json`、`racket_grip_calibration.json` 和 `racket_poses_grip_calibrated.json`，最后两者明确 `accepted=false`。报告记录逐帧残差、样本差异、训练编辑角色和来源SHA；主 `mesh_refined.bin`、`mesh_meta.json`、`racket_poses.json` 保持不变。新标注页和主Viewer使用标签SHA拒绝已知并发修改。计算先完成再保存，求解错误保留原标注。主Viewer“版本”可选择人工握点候选；检查主人体／球拍SHA，来源改变需重新校准。联合预览继续禁用属于旧人体的方向候选；发布脚本保留带此保护的校准控件。
+
+全段CPU拟合可读取握点距离和确认射线；`--grip-calibration-heldout` 接受zero-based验证帧，排除其距离及握点射线校准。GPU观测新增握点残差，保留既有训练／验证划分；preflight发现距离校准帧与GPU保留帧重叠时阻止运行，要求仅用训练帧重校准。CPU旧人工点流程本身仍是训练编辑，不能把该选项解释为完整独立验收。本轮未运行新的真实视频全段拟合或GPU任务。
+
+32项相关测试通过，包括已知几何9.5cm恢复、确认过滤、逐视图权重、保留帧隔离、错误视频与并发修改拒绝、主几何SHA保护、实际HTTP处理器以及CPU拟合集成。浏览器使用隔离副本 `3f5ecf0f7dd541ed9fbe6b9ba2705b74`，合成5点与已知9.5cm握点完成点击→确认→POST→重新加载；反解9.506cm（点击像素取整），与实际视频的人工证据无关。另验证主Viewer候选切换、旧人体方向候选禁用及控制台无错误。测试副本完成后移出视频库，报告留在 `output/offline_iterations/20261002_joint_evidence_review/grip_manual_feature/`。
+
+本地API使用既有cloud配置恢复18768服务；仅重建18769 Viewer，无GPU调度。主视频标签未替用户新增握点；下一步需用户标清晰握点，再查看图像候选、逐点RMS和镜中投影，最后按训练／保留分割验证，不能只按同帧贴合判断通过。
+
+
+#### 用户握点已收到：确认状态待核查（2026-10-02）
+
+主视频实际保存32个真人握点（UI186、187、190–215、246–249）和11个镜中握点（UI187、196–201、246–249），所有 `grip_confirmed` 为false。正式校准报告 `no_usable_confirmed_grip`，没有生效距离；已询问用户哪些标记清晰可见，不代替用户把false改成true。仅UI186／206同时具备5个完整真人人工球拍点；其他握点可提供连续接触观测，但不能各自单独反解距离。
+
+只读报告 `output/offline_iterations/20261002_joint_evidence_review/manual_grip_received_v1/grip_review_report.json` 绑定当前标签、主v9、镜面和源视频SHA；保存原标签快照、审计代码snapshot与5帧原像素裁剪。对尚未确认的坐标作诊断，主v9握点投影与真人标记差中位8.39、P95 20.86原图px；镜中中位13.54、P95 38.36px。11组真人／镜中配对极线误差中位12.07px，UI187最大54.09px；尚不能作为镜面／相机正确性证明。
+
+另在离线副本假设这些标记已确认，以UI186／206训练点做条件反解：分别9.0988／10.2694cm，统一中位9.6841cm，离中值最大0.5853cm。两帧独立位姿五点RMS 1.57／2.28px，握点沿轴残差0.88／1.59px。相机、拍形和握点深度仍为假设，厘米值不是实测；这不是独立验证或正式校准。
+
+该条件候选固定原握点深度、使用人工射线和统一距离，仅改变两个球拍帧：UI186真人五点RMS 24.46→4.42px，但镜中五点38.36→43.33px；UI206真人10.76→4.56px，镜中三点16.56→16.33px。握点射线约束使该点误差为0属于构造结果，不能当准确率。两帧旋转相对原v9变49.06／35.09°，握点相对原先验移5.20／70.62mm；没有修改人体，不能证明手指接触改善。全段最大角步长36.93→66.49°，最大角加速度14.43→95.90°/帧²，拒绝把这个单帧编辑候选替换主版本。
+
+主标签、mesh、meta、球拍、相机及镜面保持收到时状态。后续先获得可见性确认，复核UI187镜中配对，再把连续握点按明确训练／验证分割加入时序与手部联合约束，避免只改两个完整人工帧造成跳变。本次无GPU任务、无新验收版本。
+
+
+#### 握点确认生效与冻结人体时序对照（2026-10-02）
+
+用户回复“已确认”，按此前问题的全量范围，将32个真人、11个镜中已保存握点记为确认；未改任何像素坐标。通过带原标签SHA的正式API生成距离报告和独立人工握点候选。当前页面刷新可看到已确认状态、9.68cm图像估计和3D候选入口；这两个距离样本来自UI186／206，仍非实测，候选 `accepted=false`。确认前快照、语义记录和API响应在 `manual_grip_confirmed_v1/`，主v9三个保护文件SHA不变。
+
+另完成249帧CPU刚体／握点时序A/B，冻结实际v9人体、相机、镜面；不用有历史PTS问题的自动轮廓，也不把未通过校验的镜面作为训练约束。以实际主v9的R和掌内锚点为先验，联合优化旋转修正与锚点偏移；这不是原生MHR人体联合拟合。实验参数和SHA在 `temporal_ab/protocol.json`，执行代码snapshot和日志在上层目录。两组完全相同，只比较4.5cm旧距离与仅训练帧206估计的10.2694cm。网页9.6841cm是两帧编辑估计，不能直接带入保留186的拟合验证。
+
+训练24个真人握点，8个握点回归帧（UI186、193、198、203、208、211、213、248）不训练；旧UI18／186球拍及新六帧UI31／81／131／156／211／231球拍仅评估。相同图像和标签已在此前诊断看过，仍是固定回归划分，不声称全局未见的独立验收。所有镜中人工点仅评估。
+
+| 原图像素指标 | 主v9 | 同握点训练／4.5cm | 同握点训练／训练距离10.27cm |
+|---|---:|---:|---:|
+| 8个真人握点回归中位／P95 | 10.68／15.43 | 4.25／20.58 | 4.25／20.42 |
+| 旧10个真人球拍点中位／P95 | 15.25／33.85 | 15.25／33.16 | 19.11／42.20 |
+| 新28个真人球拍点中位／P95 | 13.68／34.20 | 16.25／37.68 | 9.03／39.88 |
+| 新9个镜中球拍点中位／P95 | 33.25／55.37 | 33.04／55.40 | 28.78／48.37 |
+| 最大角步长／° | 36.93 | 36.03 | 35.88 |
+| 角加速度P95／°每帧² | 9.30 | 9.56 | 9.51 |
+
+两组数值求解收敛，时序校准候选改善新点中位却恶化真人握点P95、旧球拍回归、新球拍P95及加速度P95；不替换主版本。UI175的旋转诊断边界两组均触及，校准组也触及锚点边界；该帧来自此前只有拍尖／两侧的人工点，不能把失败归因于新握点或直接放宽边界。锚点相对原先验最大偏101mm，没有人体皮肤接触验证；源v9的float32旋转正交误差约2.24e-7，候选保持同精度并通过1e-6旋转数值检查。
+
+结果 `temporal_ab/comparison.json` 和 `comparison.png`，判定 `rejected_keep_main`。网页仍可查看人工两帧编辑候选，但时序两组只留隔离结果，没有GPU运行或已验收版本。下一步优先核查握点深度／手部模型和相机镜面对应，再在同冻结划分下使用原生MHR回放做手／拍联合优化；不能只凭真人握点中位改善推广。
+
+
+### 固定9cm用户参数与249帧回归（2026-10-02）
+
+当前主结果 `85ade7a072984579831f5cb76e8e5fd3/result/racket_grip_settings.json` 明确source=user_specified、grip_from_butt_m=0.09及视频身份。人工校准保存、完整CPU拟合均优先采用该值；estimated_grip_from_butt_m仍为9.68cm诊断。两种值不可混用为实测。
+
+产物：`output/offline_iterations/20261002_joint_evidence_review/fixed_grip_9cm_v1/`。阅读REPORT.md；protocol/标签快照/对照/焦点帧/代码快照/发布哈希/备份均保存。主默认固定9cm保留v9人体旋转与握点；`racket_poses_grip_calibrated.json` 是独立9cm时序候选，accepted=false。后续保存人工点会重新生成9cm人工点候选；本次时序结果永久保留在temporal_ab，不依赖该可覆盖文件。
+
+运行实验脚本需要更改至新的输出目录且使用对应4.5cm输入备份；不能直接对已发布9cm主文件声称复现原对照。34项相关测试及浏览器切换通过；主poseSHA d7ec5e88457bbd9d9009830816b728c5886f4ae2097081b780791691d8f08dc6。
+
+
+### 全自动握持距离只读核查（2026-10-02）
+
+工具 `viewer/video_import/audit_automatic_grip.py --help`。使用当前record指定attempt原始reconstruction.npz手关节，拍长来自racket_dimensions.json，YOLO权重与准确PTS绑定原视频。predict阶段没有手工标签／主球拍／固定9cm输入；冻结predictions.json后evaluate阶段读取人工点。手关节轴线法与等深像素比例法独立输出，拒绝项保留原始值及原因但不计入有效距离。
+
+本次产物 `output/offline_iterations/20261002_joint_evidence_review/automatic_grip_validation_v1/`；完整复现命令、代码及输入哈希见REPORT.md。CLI主标签评估与本次补充6帧合并评估的范围不同，切勿混称相同结果。实际预测快照与后续评估代码分别保存；精确复现需对应代码版本和冻结源文件。23项相关测试通过。新增核查页：http://127.0.0.1:18769/datasets/85ade7a072984579831f5cb76e8e5fd3/result/automatic_grip_validation.html 。结论未验收，保留主固定9cm；无GPU人体重拟合。
+
+
+### 其余8段固定9cm应用（2026-10-02）
+
+入口 `apply_grip_collection.py --help`，发布总览 `publish_grip_collection_review.py --help`；实际命令及代码快照见 `output/offline_iterations/20261002_grip_collection_9cm_v1/REPORT.md` 与 `reproduction.json`。48.53起8段使用各自 `record.attempt` 原生archive、归一化SHA与原视频精确PTS；复制mutable JSON、只硬链接不可变大文件，固定9cm，手部先验不可靠时降权。先生成独立自由测距预测，再做真人候选角色过滤与整段刚体时序拟合；镜中只展示／诊断。
+
+现有输出目录已完成，重复执行跳过有publication.json的段，不代表重新计算；中断stage要求先核查日志。复现应在新的输出目录及隔离视频库运行，避免覆盖现有候选或已验收48.43。报告发布代码的当前版本独立保存于 `report_code_snapshot/`。各段发布manifest保护原人体、视频、纹理；全局最终验证保护48.43验收SHA。
+
+8/8段共1993帧（4帧隐藏），均完整播放至终点并抽查五视角；全部保留未验收。数值自一致门限与皮肤接触代理不能作为独立准确率。`automatic_distance_validation_queue.json` 冻结53帧，只供独立参考评估；原图标签必须明确握点／柄底／拍尖可见性，厘米准确性还需独立实测。固定9cm不是实测真值，不得回流为自动测距评估答案。相关10项测试及148个HTTP链接通过，Graphify按源码排除output重建。

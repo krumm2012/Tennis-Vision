@@ -12,11 +12,12 @@ from fit_racket_video import head_ellipse,fit_shape,silhouette_rms
 from fit_racket_pose import project,model_points,PARTS
 from run_records import write,sha256,now
 from racket_stability import smooth_vectors,stable_rotations,supported_frames,motion_metrics
+from racket_manual_evidence import view_observations,pixel_terms
 
 def select_candidate(frame):
     return frame.get('selected')
 
-def fit_dataset(folder,result=None):
+def fit_dataset(folder,result=None,manual_correction_frames=(),grip_calibration_heldout=()):
     folder=Path(folder);root=Path(result) if result else folder/'result'
     read=lambda n:json.loads((root/n).read_text())
     if (root/'racket_keypoints.json').exists() and not (root/'racket_poses_reference.json').exists():
@@ -80,17 +81,25 @@ def fit_dataset(folder,result=None):
         from racket_landmarks import validate
         manual=validate(manual,meta)
     manual_rows={r['frame']:r for r in manual['frames']} if manual else {}
-    landmark_names=['handle_end','throat','tip','head_center','rim_side','rim_opposite']
-    landmark_objects=np.r_[model_points(model)[:3],[[0,model['head_center_y_m'],0]],model_points(model)[3:]]
+    from racket_grip_calibration import estimate as estimate_grip,manual_anchor,settings,apply_settings
+    grip_calibration=apply_settings(estimate_grip(manual or {'frames':[]},{**old,'model':model},meta,grip_calibration_heldout),settings(root,meta))
+    if grip_calibration['calibration_ready']:
+        prescribed=grip_calibration.get('fixed_grip_requested',False)
+        model=dict(model,grip_y_m=grip_calibration.get('applied_grip_from_butt_m',grip_calibration['estimated_grip_from_butt_m']),grip_position_measured=False,
+            grip_position_source='user_specified' if prescribed else 'manual_image_estimate',
+            grip_calibration_frames=[] if prescribed else grip_calibration['frames'])
+        grip=np.array([0.,model['grip_y_m'],0.])
+    correction_frames=sorted(set(manual_correction_frames))
+    if not set(correction_frames)<=set(manual_rows):raise ValueError('显式修正帧必须有当前视频人工标记')
+    landmark_names=['handle_end','throat','tip','head_center','rim_side','rim_opposite','grip_center']
+    landmark_objects=np.r_[model_points(model)[:3],[[0,model['head_center_y_m'],0]],model_points(model)[3:],[grip]]
     landmark_views=[];stereo_axes=[]
     for i in range(count):
         row=keypoints['frames'][i] if keypoints else {};observations=[]
         for view in ['real','mirror']:
-            source=row.get(view,{});points={k:np.array(p)/pixel_scale for k,p in source.get('points',{}).items()};weights={k: min(1.,source.get('confidence',0)*3)*2.5/(source.get('uncertainty_px',{}).get(k,5)/pixel_scale) for k in points}
-            reviewed=manual_rows.get(i,{});review_points=reviewed.get('points' if view=='real' else 'mirror_points',{})
-            for name,p in review_points.items():points[name]=np.array(p)/pixel_scale;weights[name]=3.
+            points,weights=view_observations(row.get(view,{}),manual_rows.get(i),view,pixel_scale)
             observations.append((points,weights))
-        landmark_views.append(observations);stereo_axes.append(np.array(row['stereo_shaft']['direction_camera']) if row.get('stereo_shaft') else None)
+        landmark_views.append(observations);stereo_axes.append(np.array(row['stereo_shaft']['direction_camera']) if row.get('stereo_shaft') and i not in manual_rows else None)
     contacts=[grip_contact(f['raw']) for f in frames]
     offsets=np.array([c[0] for c in contacts]);grip_axes=np.array([hands[i]@c[1] for i,c in enumerate(contacts)])
     raw_axes=grip_axes.copy();anatomical_axes=smooth_vectors(raw_axes,meta['fps']);anatomical_axes/=np.maximum(np.linalg.norm(anatomical_axes,axis=1,keepdims=True),1e-8)
@@ -100,9 +109,9 @@ def fit_dataset(folder,result=None):
     hand_weights=np.ones(count)*4.;prior_image_errors=[None]*count
     for i in range(count):
         points=landmark_views[i][0][0]
-        if 'head_center' in points:
+        if 'head_center' in points or {'handle_end','tip'}<=set(points):
             target=wrists[i]+hands[i]@offsets[i];uv=project(np.array([target,target+grip_axes[i]*.1]),focals[i],size)
-            a=uv[1]-uv[0];b=points['head_center']-uv[0]
+            a=uv[1]-uv[0];b=points['tip']-points['handle_end'] if {'handle_end','tip'}<=set(points) else points['head_center']-uv[0]
             angle=float(np.degrees(np.arccos(np.clip(a@b/max(np.linalg.norm(a)*np.linalg.norm(b),1e-8),-1,1))))
             prior_image_errors[i]=angle
             if angle>35:hand_weights[i]=.35
@@ -157,7 +166,7 @@ def fit_dataset(folder,result=None):
     if manual_rows:
         import cv2
         for i,review in manual_rows.items():
-            ids=[k for k,name in enumerate(landmark_names) if name in review['points']]
+            ids=[k for k,name in enumerate(landmark_names) if name in landmark_views[i][0][0]]
             if len(ids)<4:continue
             camera=np.array([[focals[i],0,size[0]/2],[0,focals[i],size[1]/2],[0,0,1.]])
             observed=np.array([review['points'][landmark_names[k]] for k in ids])/pixel_scale
@@ -175,13 +184,28 @@ def fit_dataset(folder,result=None):
     # Start away from 180-degree chordal stationary points before joint optimization.
     for i in range(1,count):
         delta=Rotation.from_matrix(initial[i-1].T@initial[i]).as_rotvec();angle=np.linalg.norm(delta)
-        if angle>np.radians(30):initial[i]=initial[i-1]@Rotation.from_rotvec(delta*np.radians(30)/angle).as_matrix()
+        if angle>np.radians(30) and i not in manual_rows:initial[i]=initial[i-1]@Rotation.from_rotvec(delta*np.radians(30)/angle).as_matrix()
     offset=anatomical
     targets=wrists+np.einsum('nij,nj->ni',hands,offsets)
     raw_targets=targets.copy();correction=smooth_vectors(targets-wrists,meta['fps'])-(targets-wrists)
     # Filter small palm noise without moving the grip arbitrarily far from the mesh hand.
     correction*=np.minimum(1,.015/np.maximum(np.linalg.norm(correction,axis=1,keepdims=True),1e-8))
     targets+=correction
+    for i,row in manual_rows.items():
+        if i not in set(grip_calibration_heldout):targets[i]=manual_anchor(row,targets[i],meta)
+    # Explicit manual edits solve the real silhouette geometry at the frozen
+    # palm anchor, then constrain that pose throughout sequence optimisation.
+    # Such frames are training edits and must never count as held-out evidence.
+    manual_edits={}
+    if correction_frames:
+        from correct_reviewed_racket_frame import fit_manual_frame
+        for i in correction_frames:
+            candidate=fit_manual_frame(manual_rows[i],model,meta,mirror if mirror_enabled else None,initial[i],targets[i]-initial[i]@grip,'real_manual_fixed_grip',targets[i])
+            initial[i]=np.asarray(candidate['rotation_camera_columns']);manual_edits[i]=candidate
+    def current_rotations(x):
+        rs=Rotation.from_rotvec(x.reshape(count,3)).as_matrix()
+        for i in manual_edits:rs[i]=initial[i]
+        return rs
     # Admit mirror ellipses only when a plausible initial projection supports the association.
     for i,e in enumerate(mirror_obs):
         if e is None:continue
@@ -191,34 +215,33 @@ def fit_dataset(folder,result=None):
     # Per-frame observation residuals plus smooth hand-relative rotations.
     def robust(v):return np.sign(v)*np.sqrt(6*(np.sqrt(1+(v/3)**2)-1))
     def residual(x):
-        rs=Rotation.from_rotvec(x.reshape(count,3)).as_matrix();result=[]
+        rs=current_rotations(x);result=[]
         for i,R in enumerate(rs):
             points=ring@R.T+targets[i]-R@grip
-            result.append(robust(ellipse_residual(project(points,focals[i],size),real[i])) if accepted[i] else np.zeros(34))
+            result.append(robust(ellipse_residual(project(points,focals[i],size),real[i])) if accepted[i] and i not in manual_rows else np.zeros(34))
             reflected=points-2*(points@normal-plane)[:,None]*normal
-            result.append(robust(.3*ellipse_residual(project(reflected,focals[i],size),mirror_obs[i])) if mirror_obs[i] is not None else np.zeros(34))
+            result.append(robust(.3*ellipse_residual(project(reflected,focals[i],size),mirror_obs[i])) if mirror_obs[i] is not None and i not in manual_rows else np.zeros(34))
             obj=landmark_objects@R.T+targets[i]-R@grip
             for view in range(2):
                 observed,weights=landmark_views[i][view];camera=obj if view==0 else obj-2*(obj@normal-plane)[:,None]*normal
-                uv=project(camera,focals[i],size);terms=np.zeros((6,2))
-                for k,name in enumerate(landmark_names):
-                    if name in observed:terms[k]=(uv[k]-observed[name])*weights[name]*(1. if view==0 else .5)*(6. if name=='head_center' else 1.)
+                uv=project(camera,focals[i],size);terms=pixel_terms(uv,observed,weights,landmark_names,1. if view==0 else .5,manual_rows.get(i,{}).get('face_correspondence_confirmed',False))
                 result.append(robust(terms).ravel())
             result.append((R[:,1]-grip_axes[i])*hand_weights[i])
             result.append((R[:,1]-stereo_axes[i])*12 if stereo_axes[i] is not None else np.zeros(3))
         result.append(((rs[1:]-rs[:-1])*20).ravel())
         result.append(((rs[2:]-2*rs[1:-1]+rs[:-2])*12).ravel())
         return np.concatenate(result)
-    sparsity=lil_matrix((count*98+(count-1)*9+(count-2)*9,count*3),dtype=int)
-    for i in range(count):sparsity[i*98:(i+1)*98,i*3:(i+1)*3]=1
-    k=count*98
+    frame_residuals=68+len(landmark_names)*4+6
+    sparsity=lil_matrix((count*frame_residuals+(count-1)*9+(count-2)*9,count*3),dtype=int)
+    for i in range(count):sparsity[i*frame_residuals:(i+1)*frame_residuals,i*3:(i+1)*3]=1
+    k=count*frame_residuals
     for i in range(count-1):sparsity[k+i*9:k+(i+1)*9,i*3:(i+2)*3]=1
     k+=(count-1)*9
     for i in range(count-2):sparsity[k+i*9:k+(i+1)*9,i*3:(i+3)*3]=1
     x=Rotation.from_matrix(initial).as_rotvec().ravel()
     for iteration in range(2):
         fit=least_squares(residual,x,jac_sparsity=sparsity.tocsr(),loss='linear',max_nfev=100,ftol=1e-4);x=fit.x
-        rs=Rotation.from_rotvec(x.reshape(count,3)).as_matrix()
+        rs=current_rotations(x)
         errors=[silhouette_rms(project(ring@rs[i].T+targets[i]-rs[i]@grip,focals[i],size),e) if e is not None else None for i,e in enumerate(real)]
         if iteration==0:
             accepted=[e is not None and errors[i]<8 for i,e in enumerate(real)]
@@ -230,8 +253,8 @@ def fit_dataset(folder,result=None):
         print('iteration',iteration,'observations',sum(accepted),'cost',fit.cost,flush=True)
     # Keep the solver estimates, then remove high-frequency angular acceleration on SO(3).
     before_stability=motion_metrics(rs);raw_rs=rs.copy()
-    support=supported_frames([real[i] is not None and errors[i]<12 or mirror_obs[i] is not None for i in range(count)],meta['fps'],.6)
-    rs=stable_rotations(rs,[2.5 if accepted[i] and errors[i]<5 else .7 for i in range(count)],meta['fps'],acceleration_strength=8 if keypoints else 5)
+    support=supported_frames([i in manual_rows or real[i] is not None and errors[i]<12 or mirror_obs[i] is not None for i in range(count)],meta['fps'],.6)
+    rs=stable_rotations(rs,[2.5 if accepted[i] and errors[i]<5 else .7 for i in range(count)],meta['fps'],acceleration_strength=8 if keypoints else 5,fixed_frames=sorted(manual_rows))
     errors=[silhouette_rms(project(ring@rs[i].T+targets[i]-rs[i]@grip,focals[i],size),e) if e is not None else None for i,e in enumerate(real)]
     accepted=[e is not None and errors[i]<5 for i,e in enumerate(real)]
     rows=[]
@@ -245,8 +268,10 @@ def fit_dataset(folder,result=None):
         if R[:,1]@grip_axes[i]<np.cos(np.radians(35)):reasons.append('hand_axis_conflict')
         rows.append({'frame':i,'palm_offset_m':offsets[i].tolist(),'grip_axis_error_deg':float(np.degrees(np.arccos(np.clip(R[:,1]@grip_axes[i],-1,1)))),'status':'fitted','ambiguous':True,'quality':'silhouette_fitted' if observed else 'temporal_estimate','source':'wilson_directional_landmarks_v5' if keypoints else 'wilson_anatomical_grip_so3_v4','rotation_camera_columns':R.tolist(),'translation_camera_m':t.tolist(),'grip_target_camera_m':targets[i].tolist(),'observation_source':observation_sources[i],'raw_palm_offset_error_m':float(np.linalg.norm(targets[i]-raw_targets[i])),'stability_correction_deg':float(np.degrees(Rotation.from_matrix(raw_rs[i].T@R).magnitude())),'palm_anchor_error_m':float(np.linalg.norm(R@grip+t-targets[i])),'wrist_gap_m':float(np.linalg.norm(targets[i]-wrists[i])),'mask_fit_rms_px':round(error,2) if error is not None else None,'detection_confidence':confidence[i],'mirror_observation_used':mirror_obs[i] is not None,'rotation_step_deg':jump,'review_reasons':reasons,'projected_points':dict(zip(PARTS,uv.tolist())),'projected_head_outline':project(ring@R.T+t,focals[i],size).tolist()})
         reviewed=manual_rows.get(i,{});manual_errors=[]
-        for name,p in reviewed.get('points',{}).items():
-            k=landmark_names.index(name);pred=project((landmark_objects[k]@R.T+t)[None],focals[i],size)[0];manual_errors.append(float(np.linalg.norm(pred-np.asarray(p)/pixel_scale)))
+        if reviewed.get('points'):
+            observed=landmark_views[i][0][0]
+            terms=pixel_terms(project(landmark_objects@R.T+t,focals[i],size),observed,{name:1. for name in observed},landmark_names,rim_confirmed=reviewed.get('face_correspondence_confirmed',False))
+            manual_errors=[float(np.linalg.norm(terms[landmark_names.index(name)])) for name in observed]
         manual_rms=float(np.sqrt(np.mean(np.square(manual_errors)))) if manual_errors else None
         face_verified=bool(reviewed.get('face_correspondence_confirmed') and manual_rms is not None and manual_rms<4 and np.linalg.norm(uv[3]-uv[4])>3)
         rows[-1].update(hand_prior_weight=float(hand_weights[i]),hand_prior_image_error_deg=prior_image_errors[i],stereo_shaft_used=stereo_axes[i] is not None,normal_camera=R[:,2].tolist(),signed_face_angle_to_camera_deg=float(np.degrees(np.arccos(np.clip(R[2,2],-1,1)))),physical_face_sign_verified=face_verified,reviewed_landmark_rms_px=manual_rms,observed_keypoints={name:(p*pixel_scale).tolist() for name,p in landmark_views[i][0][0].items()})
@@ -262,7 +287,7 @@ def fit_dataset(folder,result=None):
             if direction_error>25:reasons.append('shaft_image_conflict')
             if head_error>25:reasons.append('head_center_residual')
         if hand_weights[i]<1 and 'hand_axis_conflict' in reasons:reasons[reasons.index('hand_axis_conflict')]='unreliable_hand_prior_downweighted'
-    calibration={'keyframes_1based':[i+1 for i in keys],'selection':'automatic clear-candidate selection; not manual ground truth','palm_offset_m':offset.tolist(),'grip_local_m':grip.tolist(),'method':'per-frame MCP/PIP grasp corridor; directed shaft prior; butt 45mm below contact; silhouette fit','requires_manual_confirmation':True,'status':'provisional_anatomical_prior' if np.allclose(offset,anatomical) else 'provisional_image_calibration','dimensions_measured':bool(model.get('dimensions_measured')),'grip_style':dimension_calibration['grip_style'] if dimension_calibration else 'unknown','physical_grip_bevel_verified':False,'signed_face_orientation_verified':False}
+    calibration={'keyframes_1based':[i+1 for i in keys],'selection':'automatic clear-candidate selection; not manual ground truth','palm_offset_m':offset.tolist(),'grip_local_m':grip.tolist(),'method':'MCP/PIP prior; confirmed manual grip rays at prior depth when present; image-derived grip distance remains provisional','requires_manual_confirmation':True,'status':'provisional_image_calibration' if grip_calibration['calibration_ready'] else 'provisional_anatomical_prior','dimensions_measured':bool(model.get('dimensions_measured')),'grip_style':dimension_calibration['grip_style'] if dimension_calibration else 'unknown','physical_grip_bevel_verified':False,'signed_face_orientation_verified':False,'manual_grip_calibration':grip_calibration}
     for i,row in enumerate(rows):
         if not support[i]:
             row.update(status='missing_observation',quality='hidden')
@@ -277,18 +302,24 @@ def fit_dataset(folder,result=None):
     visible=[r for r in rows if r['status']=='fitted']
     out['summary'].update(palm_anchor_max_mm=max(r['palm_anchor_error_m'] for r in visible)*1000,shaft_error_median_deg=float(np.median([r['grip_axis_error_deg'] for r in visible])),rotation_step_p95_deg=float(np.percentile([r['rotation_step_deg'] for r in visible],95)),multiview_hand_frames=multiview_frames)
     out['summary'].update(hand_prior_downweighted=int(np.count_nonzero(hand_weights<1)),stereo_shaft_frames=sum(a is not None for a in stereo_axes),face_correspondence_confirmed_frames=sum(r['physical_face_sign_verified'] for r in rows))
-    out['method']='wilson_directional_landmarks_v5' if keypoints else out['method']
+    out['method']='wilson_directional_landmarks_v6_manual_authority' if keypoints else out['method']
+    if keypoints:
+        for row in rows:row['source']=out['method']
     out['directional_evidence']=keypoints['summary'] if keypoints else None
     out['hand_axis_calibration']=axis_calibration
     out['summary']['raw_anatomical_axis_error_median_deg']=float(np.median([r['raw_anatomical_axis_error_deg'] for r in visible]))
     out['summary']['direction_review_frames']=sum('shaft_image_conflict' in r['review_reasons'] or 'head_center_residual' in r['review_reasons'] for r in rows)
     out['stability']['acceleration_strength']=8 if keypoints else 5
+    out['stability']['reviewed_frames_fixed']=sorted(manual_rows)
+    out['manual_evidence_policy']='reviewed frame replaces automatic points, ellipse and stereo priors; unordered rims; reviewed solver rotations fixed during display smoothing'
+    out['explicit_manual_corrections']={'frames':correction_frames,'validation_role':'training_edits_not_heldout','results':manual_edits,'physical_face_sign_verified':False,'accepted':False}
+    out['grip_calibration']=grip_calibration
     out['residual_pixel_units']='1280px canonical width; resolution-independent thresholds'
     for row in rows:
         row['projected_head_outline']=(np.asarray(row['projected_head_outline'])*pixel_scale).tolist()
         row['projected_points']={k:(np.asarray(v)*pixel_scale).tolist() for k,v in row['projected_points'].items()}
         if row.get('observed_polygon'):row['observed_polygon']=(np.asarray(row['observed_polygon'])*pixel_scale).tolist()
-    write(root/'racket_poses.json',out);write(root/'wilson_grasp_calibration.json',calibration);write(root/'wilson_model.json',{'model':model})
+    write(root/'racket_poses.json',out);write(root/'wilson_grasp_calibration.json',calibration);write(root/'wilson_model.json',{'model':model});write(root/'racket_grip_calibration.json',grip_calibration)
     publication=None
     if keypoints:
         from racket_quality import gate
@@ -297,4 +328,7 @@ def fit_dataset(folder,result=None):
     print(json.dumps({'candidate':out['summary'],'publication':publication['status'] if publication else None,'published':read('racket_poses.json')['summary']}),flush=True)
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--dataset',type=Path,required=True);p.add_argument('--result',type=Path);a=p.parse_args();fit_dataset(a.dataset,a.result)
+    p=argparse.ArgumentParser();p.add_argument('--dataset',type=Path,required=True);p.add_argument('--result',type=Path)
+    p.add_argument('--manual-correction-frames',type=int,nargs='*',default=[],help='Explicit zero-based manual training edits; exclude from independent validation')
+    p.add_argument('--grip-calibration-heldout',type=int,nargs='*',default=[],help='Zero-based frames excluded from grip distance/anchor calibration')
+    a=p.parse_args();fit_dataset(a.dataset,a.result,a.manual_correction_frames,a.grip_calibration_heldout)

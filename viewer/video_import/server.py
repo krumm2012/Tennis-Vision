@@ -153,6 +153,17 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if not self.allowed(): return self.json({'error':'仅允许本地访问'},403)
         route = urlsplit(self.path).path
+        if route == '/api/practice-policy':
+            from practice_scoring import POLICY
+            return self.json(POLICY)
+        review=re.fullmatch(r'/api/videos/([0-9a-f]{32})/practice-review',route)
+        if review:
+            from practice_review import load
+            try:
+                with self.server.library.lock:
+                    return self.json(load(self.server.library.folder(review[1])/'result'))
+            except (ValueError,FileNotFoundError,KeyError):
+                return self.json({'error':'视频评价数据不可用'},404)
         if route == '/api/videos': return self.json({'videos':self.server.library.list(),'generation_available':bool(self.server.library.command)})
         if route == '/' or route == '/import.html': path = REPO/'viewer/video_import/import.html'
         elif route.startswith('/default/'):
@@ -166,7 +177,7 @@ class Handler(SimpleHTTPRequestHandler):
 
             name = route.removeprefix('/assets/')
             if name in ('dataset_tools.js','dataset_racket.js','dataset_racket_review.js','dataset_appearance.js'):path=REPO/'viewer/video_import'/name
-            elif name in ('coaching.js','mesh_renderer.js','vendor/three-0.180.0.min.js'):path=REPO/'viewer/sam3d'/name
+            elif name in ('practice_coach.js','coaching.js','mesh_renderer.js','vendor/three-0.180.0.min.js'):path=REPO/'viewer/sam3d'/name
             else:return self.send_error(404)
         else:
             match = re.fullmatch(r'/datasets/([0-9a-f]{32})/(source.mp4|result/[a-zA-Z0-9_.-]+)',route)
@@ -198,14 +209,29 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.allowed(): return self.json({'error':'仅允许本地访问'},403)
         route=urlsplit(self.path)
         try:
-            edit=re.fullmatch(r'/api/videos/([0-9a-f]{32})/(annotations|calibration|racket-landmarks|racket-dimensions)',route.path)
+            review=re.fullmatch(r'/api/videos/([0-9a-f]{32})/practice-review',route.path)
+            if review:
+                from practice_review import save
+                size=int(self.headers.get('Content-Length','0'))
+                if not 0<size<=65536:raise ValueError('评价 JSON 大小无效')
+                value=json.loads(self.rfile.read(size))
+                if not isinstance(value,dict):raise ValueError('评价 JSON 无效')
+                with self.server.library.lock:
+                    result=self.server.library.folder(review[1])/'result'
+                    return self.json(save(result,value))
+            edit=re.fullmatch(r'/api/videos/([0-9a-f]{32})/(annotations|calibration|racket-landmarks|racket-dimensions|racket-grip-calibration)',route.path)
             if edit:
                 ident,action=edit.groups();folder=self.server.library.folder(ident)
                 if self.server.library.read(ident)['status']!='ready':raise ValueError('请先完成视频生成')
                 size=int(self.headers.get('Content-Length','0'))
-                if not 0<size<=(1048576 if action=='racket-landmarks' else 65536):raise ValueError('标记 JSON 大小无效')
+                if not 0<size<=(1048576 if action in ['racket-landmarks','racket-grip-calibration'] else 65536):raise ValueError('标记 JSON 大小无效')
                 value=json.loads(self.rfile.read(size));meta=json.loads((folder/'result/mesh_meta.json').read_text())
                 if value.get('video_sha256')!=meta['video_sha256'] or value.get('image_size')!=meta['image_size']:raise ValueError('标记属于其他视频')
+                if action=='racket-grip-calibration':
+                    from racket_grip_calibration import save
+                    with self.server.library.lock:
+                        report=save(folder/'result',value,value.get('landmarks_sha256'))
+                    return self.json(report)
                 if action=='racket-dimensions':
                     from racket_calibration import validate as validate_dimensions
                     reviewed=validate_dimensions(value,meta)
@@ -228,7 +254,7 @@ class Handler(SimpleHTTPRequestHandler):
                             else:shutil.copy2(source,destination)
                         shutil.copytree(folder/'result',stage,copy_function=clone);write_record(stage/'racket_landmarks.json',reviewed)
                         fit_dataset(folder,stage)
-                        changed=['racket_landmarks.json','racket_poses.json','wilson_grasp_calibration.json','wilson_model.json','grip_fit_manifest.json','racket_poses_directional.json','racket_poses_reference.json','racket_quality_gate.json','wilson_mesh_directional.bin','wilson_mesh_reference.bin']
+                        changed=['racket_landmarks.json','racket_poses.json','wilson_grasp_calibration.json','wilson_model.json','grip_fit_manifest.json','racket_poses_directional.json','racket_poses_reference.json','racket_quality_gate.json','racket_grip_calibration.json','wilson_mesh_directional.bin','wilson_mesh_reference.bin']
                         for name in changed:
                             if (stage/name).exists():(stage/name).replace(folder/'result'/name)
                     attempt=self.server.library.read(ident).get('attempt',0);archive=folder/'attempts'/f'{attempt:04d}'/'work/reconstruction.npz'

@@ -17,7 +17,7 @@ class DatasetRacketLayer {
 
  }
  update(renderer,n,mode){
-  if(!this.state)return;const row=this.rows[n];const warning=document.getElementById('fitWarning');if(warning)warning.textContent=this.enabled&&row?.grip_axis_error_deg>35?`⚠ 拍柄方向待复核 · 手部估计夹角 ${row.grip_axis_error_deg.toFixed(0)}°${row.quality!=='silhouette_fitted'?' · 当前为估计帧':''}`:'';const label=document.getElementById('gripStatus');if(label)label.textContent=row?.status==='fitted'&&row.face_angle_to_camera_deg!==undefined?`掌内握点 · 法线/相机 ${row.face_angle_to_camera_deg.toFixed(0)}° · ${row.quality==='silhouette_fitted'?'轮廓支持':'约束估计'}${row.stereo_shaft_used?' · 双视角拍柄':''}${row.physical_face_sign_verified?' · A侧已校准':' · 正负待校准'}`:'';this.state.mesh.visible=this.enabled&&row?.status==='fitted';if(!this.state.mesh.visible)return;
+  if(!this.state)return;const row=this.rows[n];const warning=document.getElementById('fitWarning');if(warning)warning.textContent=this.enabled&&row?.grip_axis_error_deg>35?`⚠ 拍柄方向待复核 · 手部估计夹角 ${row.grip_axis_error_deg.toFixed(0)}°${row.quality!=='silhouette_fitted'?' · 当前为估计帧':''}`:'';const label=document.getElementById('gripStatus');if(label)label.textContent=row?.status==='fitted'&&row.face_angle_to_camera_deg!==undefined?`柄底→握点 ${(this.model.grip_y_m*100).toFixed(2)}cm · 法线/相机 ${row.face_angle_to_camera_deg.toFixed(0)}° · ${row.quality==='silhouette_fitted'?'轮廓支持':'约束估计'}${row.stereo_shaft_used?' · 双视角拍柄':''}${row.physical_face_sign_verified?' · A侧已校准':' · 正负待校准'}`:'';this.state.mesh.visible=this.enabled&&row?.status==='fitted';if(!this.state.mesh.visible)return;
   this.lastFrame=n;this.present(renderer,n);
  }
  present(renderer,n){
@@ -32,7 +32,7 @@ class DatasetRacketLayer {
  overlay(context,transform,n){
   const row=this.rows[n];if(!this.enabled||row?.status!=='fitted')return;context.strokeStyle=row.quality!=='silhouette_fitted'?'#ffbd62':'#6ce5a3';context.lineWidth=1.5;context.beginPath();row.projected_head_outline?.forEach((p,i)=>{const q=transform(p);i?context.lineTo(...q):context.moveTo(...q)});context.closePath();context.stroke();
   if(this.showEvidence){
-   const labels={handle_end:'柄',throat:'喉',tip:'头',head_center:'心',rim_side:'A',rim_opposite:'B'};
+   const labels={handle_end:'柄底',throat:'线床下缘',tip:'头',head_center:'心',rim_side:'A',rim_opposite:'B',grip_center:'握点'};
    for(const [name,p] of Object.entries(row.observed_keypoints||this.observations?.[n]?.real?.points||{})){const q=transform(p);context.fillStyle='#63e5db';context.beginPath();context.arc(...q,3,0,Math.PI*2);context.fill();context.font='11px system-ui';context.fillText(labels[name]||name,q[0]+5,q[1]-5)}
    let arrow=row.projected_face_normal;
    if(!arrow&&this.meta){const R=row.rotation_camera_columns,t=row.translation_camera_m,head=t.map((v,i)=>v+R[i][1]*this.model.head_center_y_m),tip=head.map((v,i)=>v+R[i][2]*.15),project=p=>[p[0]/p[2]*this.meta.focal[n]+this.meta.image_size[0]/2,p[1]/p[2]*this.meta.focal[n]+this.meta.image_size[1]/2];if(head[2]>0&&tip[2]>0)arrow=[project(head),project(tip)]}

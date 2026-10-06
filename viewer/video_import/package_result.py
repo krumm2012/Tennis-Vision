@@ -60,3 +60,4 @@ def package(video, archive, destination):
         visible=valid&(u>=0)&(u<=1)&(v>=0)&(v<=1)
         write_record(destination/'quality_report.json',{'schema_version':1,'frames':count,'video_sha256':metadata['video_sha256'],'mean_mask_fraction':float(np.mean([s['real'] for s in stats])),'mean_vertices_in_image_fraction':float(visible.mean()),'projection_metric':'vertex projection bounds only; not visible-surface texture coverage','max_display_correction_m':float(np.linalg.norm(stable-vertices,axis=-1).max()),'mirror_available':False,'temporal_texture_available':False})
         shutil.copy2(video,destination/'video.mp4');shutil.copy2(SOURCE/'video_import/dataset.html',destination/'viewer.html')
+        shutil.copy2(SOURCE/'video_import/racket_grip_annotation.html',destination/'grip_annotation.html')

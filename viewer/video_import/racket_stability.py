@@ -12,17 +12,26 @@ def smooth_vectors(values,fps):
     robust=median_filter(values,size=(3,1),mode='nearest')
     return savgol_filter(robust,window,2,axis=0,mode='interp')
 
-def stable_rotations(matrices,weights,fps,acceleration_strength=5):
+def stable_rotations(matrices,weights,fps,acceleration_strength=5,fixed_frames=()):
     """Fit on SO(3), penalizing angular acceleration, not matrix components.
 
     Constant angular velocity has zero acceleration. Low-evidence frames may
     move farther; this is an estimated display sequence, not new observations.
     """
     matrices=np.asarray(matrices);count=len(matrices)
+    fixed=np.array(sorted(set(fixed_frames)),dtype=int)
+    if len(fixed) and (fixed.min()<0 or fixed.max()>=count):raise ValueError('Fixed rotation index outside sequence')
     if count<3:return matrices.copy()
     weights=np.asarray(weights);scale=fps/25
+    movable=np.array([i for i in range(count) if i not in set(fixed)],dtype=int)
+    initial=Rotation.from_matrix(matrices).as_rotvec()
+    if not len(movable):return matrices.copy()
+    def unpack(x):
+        vectors=initial.copy();vectors[movable]=x.reshape(-1,3)
+        rs=Rotation.from_rotvec(vectors).as_matrix();rs[fixed]=matrices[fixed]
+        return rs
     def residual(x):
-        rs=Rotation.from_rotvec(x.reshape(-1,3)).as_matrix()
+        rs=unpack(x)
         anchor=Rotation.from_matrix(np.einsum('nji,njk->nik',matrices,rs)).as_rotvec()*weights[:,None]
         # Spatial (camera-frame) angular increments avoid changing local axes.
         velocity=Rotation.from_matrix(np.einsum('nij,nkj->nik',rs[1:],rs[:-1])).as_rotvec()
@@ -33,8 +42,9 @@ def stable_rotations(matrices,weights,fps,acceleration_strength=5):
     for i in range(count-1):sparsity[start+3*i:start+3*i+3,3*i:3*i+6]=1
     start+=(count-1)*3
     for i in range(count-2):sparsity[start+3*i:start+3*i+3,3*i:3*i+9]=1
-    fit=least_squares(residual,Rotation.from_matrix(matrices).as_rotvec().ravel(),jac_sparsity=sparsity.tocsr(),max_nfev=80,ftol=1e-5)
-    return Rotation.from_rotvec(fit.x.reshape(-1,3)).as_matrix()
+    columns=(movable[:,None]*3+np.arange(3)).ravel()
+    fit=least_squares(residual,initial[movable].ravel(),jac_sparsity=sparsity.tocsr()[:,columns],max_nfev=80,ftol=1e-5)
+    return unpack(fit.x)
 
 def supported_frames(observed,fps,max_gap_seconds=.6):
     """Bounded loss can be estimated; leading/trailing/long absence stays hidden."""

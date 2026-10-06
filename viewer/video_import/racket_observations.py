@@ -6,6 +6,7 @@ ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'viewer/sam3d'))
 from fit_racket_pose import project
 from run_records import write,sha256,now
+from source_frame_alignment import source_frame_indices
 
 def crop_region(center,radius,size):
     w,h=size;x,y=np.asarray(center)
@@ -16,10 +17,12 @@ def detect(folder,model_path,device='mps',result=None):
     folder=Path(folder);out=Path(result) if result else folder/'result';meta=json.loads((out/'mesh_meta.json').read_text());attempt=json.loads((folder/'record.json').read_text())['attempt']
     with np.load(folder/'attempts'/f'{attempt:04d}'/'work/reconstruction.npz',allow_pickle=False) as d:joints=d['joints'];roots=d['source_roots'];focal=d['focal']
     source=folder/'original.video' if (folder/'original.video').exists() else folder/'source.mp4'
+    indices,original_size,normalized_size=source_frame_indices(source,folder/'source.mp4',meta['fps'])
+    if len(indices)!=meta['frames'] or normalized_size!=meta['image_size']:raise ValueError('观测时间轴与 SAM 元数据不一致')
     cap=cv2.VideoCapture(str(source));rate=cap.get(cv2.CAP_PROP_FPS);detector=YOLO(str(model_path));size=np.array(meta['image_size']);previous_index=-1;frames=[]
     mirror=json.loads((out/'mirror_geometry.json').read_text()) if meta.get('mirror_available') else None
     for n in range(meta['frames']):
-        index=int(round(n/meta['fps']*rate))
+        index=int(indices[n])
         if index!=previous_index+1:cap.set(cv2.CAP_PROP_POS_FRAMES,index)
         ok,image=cap.read();previous_index=index
         if not ok:raise ValueError('原视频时间轴无法与 SAM 帧对应')
@@ -40,7 +43,7 @@ def detect(folder,model_path,device='mps',result=None):
         frames.append({'frame':n,'source_frame':index,'candidates':candidates})
         if n%25==24 or n==meta['frames']-1:print(f'{n+1}/{meta["frames"]}: real {sum(any(c["view"]=="real" for c in r["candidates"]) for r in frames)}',flush=True)
     cap.release()
-    write(out/'racket_roi_candidates.json',{'video_sha256':meta['video_sha256'],'original_sha256':sha256(source),'original_size':original_size.tolist(),'original_fps':rate,'image_size':size.tolist(),'fps':meta['fps'],'detector_sha256':sha256(model_path),'finished_at':now(),'frames':frames})
+    write(out/'racket_roi_candidates.json',{'video_sha256':meta['video_sha256'],'original_sha256':sha256(source),'original_size':original_size.tolist(),'original_fps':rate,'image_size':size.tolist(),'fps':meta['fps'],'source_frame_mapping':'original PTS through zero-start fps=25 round=near; never average-fps indexing','normalized_sha256':sha256(folder/'source.mp4'),'detector_sha256':sha256(model_path),'finished_at':now(),'frames':frames})
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--dataset',type=Path,required=True);p.add_argument('--result',type=Path);p.add_argument('--model',type=Path,required=True);p.add_argument('--device',default='mps');a=p.parse_args();detect(a.dataset,a.model,a.device,a.result)

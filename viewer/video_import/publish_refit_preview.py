@@ -44,9 +44,8 @@ def publish(result,run):
     start=html.index('<select id="pose">');end=html.index('</select>',start)+len('</select>')
     html=html[:start]+'<select id="pose" disabled><option value="refined" id="multiviewPose" selected>联合拟合 v9</option></select>'+html[end:]
     html=html.replace('<h1>新视频 · 三维人体</h1>','<h1>三维人体 · 联合拟合 v9</h1><p role="status" style="color:#ffbd62">候选预览 · 抖动未通过验收 · 原版本已备份</p>')
-    # Old directional candidates were fitted to a different body. Do not expose
-    # their selector or a local refit action in this paired-body preview.
-    html=html.replace('<script src="/assets/dataset_racket_review.js"></script>','')
+    # Review UI blocks old directional versions for this paired body and routes
+    # manual edits to the separate grip candidate endpoint, preserving the pair.
     pending=result/'mesh_refined.pending.bin';display.tofile(pending);pending.replace(result/'mesh_refined.bin')
     write(result/'racket_poses.json',poses);write(result/'mesh_meta.json',meta)
     manifest={'kind':'user_requested_preview','accepted':False,'job_id':remote['remote_job_id'],'candidate_sha256':report['candidate_sha256'],'backup':str(backup.resolve()),'display_rebase':'candidate_local + candidate_root - existing_source_root','files':{name:sha256(result/name) for name in names[:3]}}
