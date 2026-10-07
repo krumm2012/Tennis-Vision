@@ -95,13 +95,14 @@ def attach_score(event):
     event["biomechanics"] = bio
     bio.update(practice_score=result, swing_score=result["score"], swing_grade=result["grade"])
     ext = bio.get("extended_biomechanics") or {}
-    score = {"overall_score": result["score"], "grade": result["grade"], "sub_scores": {},
+    existing_sub = ext.get("swing_quality_score", {}).get("sub_scores") or (bio.get("metrics", {}).get("swing_quality_score", {}) or {}).get("sub_scores") or {}
+    score = {"overall_score": result["score"], "grade": result["grade"], "sub_scores": existing_sub,
              "policy_version": POLICY_VERSION, "scope": result["scope"]}
     bio["extended_biomechanics"] = ext
     event["extended_biomechanics"] = ext
     ext["swing_quality_score"] = score
     if "metrics" in bio:
         bio["metrics"]["swing_quality_score"] = {"value": result["score"], "grade": result["grade"],
-             "confidence": result["confidence"], "coach_eligible": False, "sub_scores": {},
+             "confidence": result["confidence"], "coach_eligible": False, "sub_scores": existing_sub,
              "exclusion_reason": "score_is_not_an_independent_measurement"}
     return result
