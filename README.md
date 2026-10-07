@@ -6,6 +6,30 @@
 Tennis match analysis from a single broadcast camera: ball tracking, court geometry,
 player tracking, shot classification and 3-D trajectory reconstruction.
 
+## Current branch: `hehaa-3dpose`
+
+This branch maintains the 3D Viewer, video library, body/racket fitting and their
+deployment tools independently. Its tracking branch is `hehaa/hehaa-3dpose`;
+`main` is the original analysis pipeline. Start with
+[the video library guide](viewer/video_import/README.md) and
+[the reproduction runbook](viewer/video_import/REPRODUCTION_RUNBOOK.md).
+Generated videos, model weights and experiment outputs remain local under
+ignored directories; preserve them separately from Git.
+
+Branch regression checks (Python with NumPy, SciPy, OpenCV, Pillow and CPU Torch;
+FFmpeg and Node.js must also be installed):
+
+```sh
+python -m unittest discover -s viewer/video_import -p 'test_*.py'
+python -m unittest discover -s viewer/sam3d/joint_fit -p 'test_*.py'
+node --test viewer/sam3d/test_*.cjs viewer/sam3d/test_mesh_playback.js viewer/video_import/test_*.cjs
+```
+
+CI runs these checks separately from the original pipeline tests. Keep fixes
+on this branch and review upstream changes before incorporating them. Changes
+to scoring policy require deliberate versioning and coordination with the
+documented analyzer copy; runtime does not import the other repository.
+
 <div align="center">
   <img src="frame_images/tennis_analysis_quarter_frame53.png" width="820" alt="Annotated output frame">
 </div>
@@ -472,7 +496,7 @@ on for repeated runs against the same clip.
 
 ### Test suite
 
-**412 unit and integration tests** (`pytest tests/`), covering ball-state classification,
+**411 unit and integration tests** (`pytest tests/`), covering ball-state classification,
 Kalman and RTS smoothing including the physical speed-plausibility gate, mini-court
 coordinate mapping, trajectory drawing, pose-based shot classification, the hit and bounce
 classifier and its feature contract, the rally grammar and its decoder, the no-ground-truth
@@ -803,8 +827,8 @@ Ordered by measured value, not by interest.
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/                                       # 412 tests, needs the weights
-pytest tests/ -m "not slow"                         # 411, what CI runs, no weights
+pytest tests/                                       # 411 tests, needs the weights
+pytest tests/ -m "not slow"                         # 410, what CI runs, no weights
 
 python eval/shot_frame_accuracy.py                  # reference clip, ships with repo
 python eval/speed_accuracy.py                       # reference clip, ships with repo
@@ -833,7 +857,7 @@ mini_visual_court/    mini-court mapping and trajectory drawing
 models/               small trained weights (committed); large weights fetched by script
 notes/                CV concept write-ups
 scripts/              download_models.py, build_clip_suite.py
-tests/                412 unit and integration tests
+tests/                411 unit and integration tests
 tools/                label_shots.py, keyboard-driven contact and bounce labelling
 trackers/             tracknet_ball_tracker.py, player_tracker.py
 training/             court keypoint and shot classifier training

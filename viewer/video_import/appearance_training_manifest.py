@@ -20,16 +20,10 @@ import zipfile
 import cv2
 import numpy as np
 
+from run_records import sha256
+
 IDENTITIES = ('scene_id', 'person_id', 'outfit_id', 'racket_id', 'group_id')
 PARAMETERS = {'mhr_model_params': 204, 'mhr_shape_params': 45, 'mhr_expr_params': 72}
-
-
-def sha256(path):
-    h = hashlib.sha256()
-    with Path(path).open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def reference(value, base):

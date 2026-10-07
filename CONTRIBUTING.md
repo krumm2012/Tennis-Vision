@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Tennis-Vision! This document prov
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - Git
 - Basic understanding of computer vision and machine learning
 - Familiarity with PyTorch and OpenCV
@@ -28,7 +28,7 @@ Thank you for your interest in contributing to Tennis-Vision! This document prov
    
    # Install the project and its development extras
    pip install -e ".[dev]"
-   pip install pre-commit
+   pip install pre-commit ruff
    ```
 
 3. **Set up pre-commit hooks**
@@ -80,8 +80,7 @@ Before creating an issue, please:
    pytest tests/
    
    # Check code style
-   black --check .
-   flake8 .
+   ruff check --select=E9,F821,F811,F823 .
    ```
 
 4. **Commit and push**
@@ -101,8 +100,8 @@ Before creating an issue, please:
 ### Python Code Style
 
 - Follow PEP 8 standards
-- Use Black for code formatting
-- Maximum line length: 88 characters
+- Match the surrounding style; avoid broad formatting changes
+- Use the errors-only Ruff checks configured in CI
 - Use type hints where appropriate
 
 ```python

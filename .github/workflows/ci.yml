@@ -75,3 +75,24 @@ jobs:
       # imports are the point, and the codebase predates any linter. Widening this is
       # post-launch cleanup, not a launch requirement.
       - run: ruff check --select=E9,F821,F811,F823 .
+
+  viewer:
+    name: 3D branch (CPU contracts and Viewer)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install --index-url https://download.pytorch.org/whl/cpu torch
+      - run: pip install numpy scipy opencv-python-headless pillow
+      - name: Video library and fitting contracts
+        run: |
+          python -m unittest discover -s viewer/video_import -p 'test_*.py'
+          python -m unittest discover -s viewer/sam3d/joint_fit -p 'test_*.py'
+      - name: Viewer regressions
+        run: node --test viewer/sam3d/test_*.cjs viewer/sam3d/test_mesh_playback.js viewer/video_import/test_*.cjs

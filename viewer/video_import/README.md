@@ -81,6 +81,23 @@ python3 -m unittest discover -s viewer/video_import -p 'test_*.py' -v
 
 Tests use generated color videos and synthetic geometry, not model inference.
 
+## Raw pose and racket export
+
+`export_pose_kinematics.py --result RESULT --archive RECONSTRUCTION.npz --output OUTPUT`
+exports JSON, NPZ and CSV from the archive matching `mesh_local.bin` and the
+current rigid racket poses. Float64 archives are compared with the exact
+float32 representation written by the packager. Frame rate, source roots,
+timeline and video identity must agree.
+
+NPZ uses `angular_interval_time_s` for pelvis, trunk and racket rotations;
+limb swing velocities use `angular_frame_time_s`. The metadata maps each
+series to its time array. These estimates are in model scale, with no measured
+metric calibration or impact alignment.
+
+A result with `joint_preview_manifest.json` is refused: its refined candidate
+body and racket must be exported together with the candidate root transform.
+The raw exporter does not yet support that paired candidate contract.
+
 ## Existing cloud GPU
 
 Use `deploy/3dpose/cloud_gpu/deploy.sh` to provision the worker scripts into an existing GPU Python environment, then `start_local.py` to connect the local library. See the linked Chinese runbook for configuration, real-video smoke commands, records and limitations.

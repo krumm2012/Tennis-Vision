@@ -5,19 +5,34 @@ faces [T,3], source_roots [F,3], focal [F] in normalized video pixels,
 masks [F,H,W] uint8 person confidence (0..255). No pickle or legacy-video reuse.
 """
 from pathlib import Path
-import json, math, shutil, hashlib, sys
+import json, math, shutil, sys
 import cv2
 import numpy as np
 
 SOURCE=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(SOURCE/'sam3d/joint_fit'))
 from stabilize import smooth_display,stabilize_body
-from run_records import write as write_record
+from run_records import sha256, write as write_record
 
 def package(video, archive, destination):
     cap=cv2.VideoCapture(str(video));fps=cap.get(cv2.CAP_PROP_FPS);width=int(cap.get(cv2.CAP_PROP_FRAME_WIDTH));height=int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT));count=int(cap.get(cv2.CAP_PROP_FRAME_COUNT));cap.release()
     if not 0<fps<=120 or not width or not height:raise ValueError('无法读取标准化视频')
+    video_hash = sha256(video)
+    provenance = Path(archive).parent / 'multiview_manifest.json'
+    multiview_report = None
+    for name in ('inference_manifest.json', 'multiview_manifest.json'):
+        path = Path(archive).parent / name
+        if path.exists():
+            report = json.loads(path.read_text())
+            if report['source_sha256'] != video_hash or report['frames'] != count:
+                raise ValueError('推理来源与当前视频不一致')
+            if name == 'multiview_manifest.json':
+                if report['image_size'] != [width, height] or report['fps'] != fps:
+                    raise ValueError('多视角时间轴与视频不一致')
+                multiview_report = report
     with np.load(archive,allow_pickle=False) as data:
+        if 'video_sha256' in data and str(data['video_sha256']) != video_hash:
+            raise ValueError('重建档案与当前视频 SHA256 不一致')
         vertices=data['vertices'];faces=data['faces'];roots=data['source_roots'];focal=data['focal'];masks=data['masks']
         mirror_masks=data['masks_mirror_sam2'] if 'masks_mirror_sam2' in data else None
         if mirror_masks is not None and (mirror_masks.shape!=masks.shape or mirror_masks.dtype!=np.uint8):raise ValueError('镜中 SAM2 遮罩与真人遮罩不匹配')
@@ -44,11 +59,9 @@ def package(video, archive, destination):
         with (destination/'temporal_texture_sam2.bin').open('wb') as stream:stream.truncate(count*vertices.shape[1]*6)
         centers=((vertices.min(axis=1)+vertices.max(axis=1))/2).tolist()
         spans=np.max(vertices.max(axis=1)-vertices.min(axis=1),axis=1).tolist()
-        metadata={'video_sha256':hashlib.sha256(Path(video).read_bytes()).hexdigest(),'frames':count,'vertices':vertices.shape[1],'faces':len(faces),'fps':fps,'image_size':[width,height],'mask_atlas_grid':[cols,rows],'source_roots':roots.tolist(),'focal':focal.tolist(),'display_centers':centers,'display_spans':spans,'mirror_available':False,'stabilization_available':True,'stabilization':{'method':'symmetric_speed_adaptive','max_offset_m':.015},'texture_method':'source_video_projection'}
-        provenance=Path(archive).parent/'multiview_manifest.json'
-        if provenance.exists():
-            report=json.loads(provenance.read_text())
-            if report['source_sha256']!=metadata['video_sha256'] or report['frames']!=count or report['image_size']!=[width,height]:raise ValueError('多视角来源与视频不一致')
+        metadata={'video_sha256':video_hash,'frames':count,'vertices':vertices.shape[1],'faces':len(faces),'fps':fps,'image_size':[width,height],'mask_atlas_grid':[cols,rows],'source_roots':roots.tolist(),'focal':focal.tolist(),'display_centers':centers,'display_spans':spans,'mirror_available':False,'stabilization_available':True,'stabilization':{'method':'symmetric_speed_adaptive','max_offset_m':.015},'texture_method':'source_video_projection'}
+        if multiview_report is not None:
+            report = multiview_report
             shutil.copy2(provenance,destination/provenance.name)
             metadata.update(mask_method=report['sam2_model'],mirror_sam3d_frames=report['mirror_sam3d_frames'],multiview_inference_available=bool(report['mirror_available']))
         def write(name,value):(destination/name).write_text(json.dumps(value,separators=(',',':')))

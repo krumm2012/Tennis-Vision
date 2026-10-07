@@ -15,6 +15,10 @@ class ImportTests(unittest.TestCase):
  def request(self,method,path,body=None,headers=None):
   conn=http.client.HTTPConnection('127.0.0.1',self.server.server_port);conn.request(method,path,body=body,headers=headers or {});r=conn.getresponse();status=r.status;data=r.read();conn.close();return status,data
  def test_default_viewer_and_video_are_served_without_docker(self):
+  default=self.root/'default';default.mkdir()
+  (default/'viewer.html').write_text('<html>SAM</html>')
+  (default/'video.mp4').write_bytes(self.video.read_bytes())
+  self.default_data=patch('server.DEFAULT_DATA',default);self.default_data.start();self.addCleanup(self.default_data.stop)
   status,page=self.request('GET','/default/viewer.html');self.assertEqual(status,200);self.assertIn(b'SAM',page)
   status,part=self.request('GET','/default/video.mp4',headers={'Range':'bytes=0-15'});self.assertEqual(status,206);self.assertEqual(len(part),16)
   status,_=self.request('GET','/default/vendor/three-0.180.0.min.js');self.assertEqual(status,200)
@@ -32,6 +36,13 @@ class ImportTests(unittest.TestCase):
  def test_package_uses_own_geometry_and_rejects_frame_mismatch(self):
   archive=self.root/'reconstruction.npz';v=np.array([[[0,0,1],[1,0,1],[0,1,1]]]*3,dtype=np.float32)
   np.savez(archive,vertices=v,faces=np.array([[0,1,2]]),source_roots=np.zeros((3,3)),focal=np.ones(3)*50,masks=np.ones((3,24,32),np.uint8)*255)
+  wrong=self.root/'wrong-video.npz'
+  np.savez(wrong,vertices=v,faces=np.array([[0,1,2]]),source_roots=np.zeros((3,3)),focal=np.ones(3)*50,masks=np.ones((3,24,32),np.uint8)*255,video_sha256='another-video')
+  with self.assertRaises(ValueError):package(self.video,wrong,self.root/'wrong-result')
+  self.assertFalse((self.root/'wrong-result').exists())
+  manifest=self.root/'inference_manifest.json';manifest.write_text(json.dumps({'source_sha256':'another-video','frames':3}))
+  with self.assertRaises(ValueError):package(self.video,archive,self.root/'wrong-manifest-result')
+  self.assertFalse((self.root/'wrong-manifest-result').exists());manifest.unlink()
   package(self.video,archive,self.root/'result');meta=json.loads((self.root/'result/mesh_meta.json').read_text());self.assertEqual(meta['frames'],3);self.assertEqual(meta['image_size'],[64,48]);self.assertFalse(meta['mirror_available']);self.assertTrue(meta['stabilization_available']);self.assertTrue((self.root/'result/quality_report.json').is_file())
   import cv2
   self.assertEqual(int(cv2.imread(str(self.root/'result/person_masks_sam2.png'))[0,0,2]),255)

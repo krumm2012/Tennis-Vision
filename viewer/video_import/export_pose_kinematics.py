@@ -1,7 +1,6 @@
 """Export the raw Viewer pose and rigid racket for downstream motion analysis."""
 import argparse
 import csv
-import hashlib
 import json
 from collections import Counter
 from pathlib import Path
@@ -9,17 +8,11 @@ from pathlib import Path
 import numpy as np
 from scipy.spatial.transform import Rotation
 
+from run_records import sha256
+
 
 RACKET_NAMES = ['handle_end', 'grip_center', 'throat', 'tip', 'head_center',
                 'rim_side', 'rim_opposite']
-
-
-def sha256(path):
-    h = hashlib.sha256()
-    with Path(path).open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def clean(value):
@@ -89,9 +82,13 @@ def export(result, archive, output):
     result, archive, output = map(Path, (result, archive, output))
     meta = json.loads((result / 'mesh_meta.json').read_text())
     racket = json.loads((result / 'racket_poses.json').read_text())
+    if (result / 'joint_preview_manifest.json').exists():
+        raise ValueError('Joint preview body/racket require their paired candidate archive; raw export is unavailable')
     labels = json.loads(Path(__file__).with_name('mhr70_names.json').read_text())
     names = labels['names']
     n, fps = meta['frames'], float(meta['fps'])
+    if type(n) is not int or n < 1 or not np.isfinite(fps) or fps <= 0:
+        raise ValueError('Expected a positive frame count and finite positive fps')
     for key in ['video_sha256', 'fps', 'image_size']:
         if racket[key] != meta[key]:
             raise ValueError(f'Racket identity mismatch: {key}')
@@ -110,14 +107,16 @@ def export(result, archive, output):
                     any(manifest[k] != meta[k] for k in ['frames', 'fps', 'image_size'])):
                 raise ValueError('Body archive manifest identity mismatch')
         local = source['joints'].astype(float)
-        roots = np.asarray(meta['source_roots'])
+        roots = np.asarray(meta['source_roots'], dtype=float)
+        if roots.shape != (n, 3) or not np.isfinite(roots).all():
+            raise ValueError('Expected finite source roots with shape (frames, 3)')
         if local.shape != (n, 70, 3) or not np.isfinite(local).all():
             raise ValueError('Expected finite MHR70 joints for every frame')
         if not np.array_equal(roots, source['source_roots']):
             raise ValueError('Body source roots differ from Viewer')
         mesh = np.memmap(result / 'mesh_local.bin', dtype='<f4', mode='r',
                          shape=source['vertices'].shape)
-        if not np.array_equal(mesh, source['vertices']):
+        if mesh.shape != (n, meta['vertices'], 3) or not np.array_equal(mesh, source['vertices'].astype('<f4')):
             raise ValueError('Archive mesh differs from raw Viewer geometry')
     body = local + roots[:, None, :]
     model = racket['model']
@@ -135,10 +134,12 @@ def export(result, archive, output):
         if row['status'] != 'fitted':
             continue
         R = np.asarray(row['rotation_camera_columns'], dtype=float)
+        if R.shape != (3, 3) or not np.isfinite(R).all():
+            raise ValueError(f'Invalid rotation shape or values at frame {i}')
         if not np.allclose(R.T @ R, np.eye(3), atol=1e-5) or not np.isclose(np.linalg.det(R), 1, atol=1e-5):
             raise ValueError(f'Invalid rotation at frame {i}')
         t = np.asarray(row['translation_camera_m'], dtype=float)
-        if not np.isfinite(t).all():
+        if t.shape != (3,) or not np.isfinite(t).all():
             raise ValueError('Invalid translation')
         rotations[i], translations[i] = R, t
         points[i] = obj @ R.T + t
@@ -203,6 +204,7 @@ def export(result, archive, output):
         'missing_policy': 'Hidden racket = null in JSON / NaN in NPZ / blank CSV. No added interpolation.',
         'derivatives': {'position': 'central difference at frame time, fps/2*(next-previous)',
                         'angular': 'spatial log(R_next @ R_current.T)*fps, interval midpoint',
+                        'angular_time_arrays': {key: ('angular_frame_time_s' if key.endswith('_swing_only') else 'angular_interval_time_s') for key in angular},
                         'filter': 'none; original fitted racket temporal processing retained',
                         'endpoints': 'null; derivatives also null adjacent to gaps',
                         'units': {'linear_velocity': 'model m/s', 'linear_acceleration': 'model m/s^2',
@@ -211,7 +213,7 @@ def export(result, archive, output):
                                  'pelvis_trunk_separation': 'signed angle between proxy lateral axes about spine; not ground-plane rotation',
                                  'limb_angular_velocity': 'cross(unit segment, derivative); longitudinal twist unavailable',
                                  'flexion': '180 minus internal 3D joint angle; zero means straight'},
-        'limits': ['Pose and racket are estimated and this clip is not accepted.',
+        'limits': ['Pose and racket are estimated; acceptance is recorded separately in racket_accepted.',
                    'Asset dimensions, 9cm grip position and camera scale are not measured.',
                    'Rim labels and model normal do not identify physical racket face A/B.',
                    'Raw finite differences may amplify pose jitter at 25 fps.',
@@ -240,6 +242,7 @@ def export(result, archive, output):
                         racket_rotation_local_to_camera=rotations, racket_translation_camera_m=translations,
                         body_velocity_camera_m_s=velocity_body, racket_velocity_camera_m_s=velocity_racket,
                         body_acceleration_camera_m_s2=acceleration_body, racket_acceleration_camera_m_s2=acceleration_racket,
+                        angular_frame_time_s=np.arange(n) / fps,
                         angular_interval_time_s=(np.arange(n - 1) + .5) / fps,
                         **{k + '_angular_velocity_rad_s': v for k, v in angular.items()},
                         **{k + '_rotation_local_to_camera': v for k, v in frame_matrices.items() if k != 'racket'},

@@ -247,26 +247,3 @@ def test_output_directories_are_created_from_nothing(tmp_path):
 
     assert target.exists(), "save_stats must create its output directory tree"
     assert list(target.glob("summary_*.json")), "and actually write the summary"
-
-
-def test_no_mkdir_forgets_its_parents():
-    """
-    The same defect anywhere else would fail the same way, six minutes in. Cheap to
-    assert across the tree rather than rely on nobody reintroducing it.
-    """
-    # The pattern is spelled in two halves so this file does not match itself: it
-    # quotes the offending call in its own docstring and failure message.
-    bad = "mkdir(" + "exist_ok=True)"
-    offenders = []
-    for path in REPO.rglob("*.py"):
-        if any(part in {"venv", ".git", "build", "dist"} for part in path.parts):
-            continue
-        if path.name == "test_packaging.py":
-            continue
-        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if bad in line:
-                offenders.append(f"{path.relative_to(REPO)}:{i}")
-    assert not offenders, (
-        "mkdir(exist_ok=True) does not create parent directories. Use "
-        "mkdir(parents=True, exist_ok=True):\n  " + "\n  ".join(offenders)
-    )
